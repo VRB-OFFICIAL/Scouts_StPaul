@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Troop Tracker — Groups, Attendance & Points</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="connectionStatus"></div>
+
+<header>
+  <h1>⚜ Troop Tracker</h1>
+  <p>Groups &middot; Attendance &middot; Points</p>
+  <div class="rope-divider"></div>
+</header>
+
+<nav>
+  <button data-view="groups" class="active">Groups</button>
+  <button data-view="attendance">Attendance</button>
+  <button data-view="points">Points &amp; Leaderboard</button>
+</nav>
+
+<main>
+
+  <!-- GROUPS VIEW -->
+  <section id="view-groups" class="view active">
+    <div class="groups-grid" id="groupsGrid"></div>
+  </section>
+
+  <!-- ATTENDANCE VIEW -->
+  <section id="view-attendance" class="view">
+    <div class="attendance-controls">
+      <label for="attendanceDate">Meeting date:</label>
+      <input type="date" id="attendanceDate">
+      <button class="primary-btn" id="saveAttendanceBtn">Save attendance</button>
+      <span id="attendanceSavedMsg">Saved ✓</span>
+    </div>
+    <div id="attendanceGroups"></div>
+
+    <div class="history">
+      <h3>Past meetings</h3>
+      <div id="historyList"></div>
+    </div>
+  </section>
+
+  <!-- POINTS VIEW -->
+  <section id="view-points" class="view">
+    <div class="points-form">
+      <div>
+        <label for="pointsGroupSelect">Group</label>
+        <select id="pointsGroupSelect"></select>
+      </div>
+      <div>
+        <label for="pointsMemberSelect">Person</label>
+        <select id="pointsMemberSelect"></select>
+      </div>
+      <div>
+        <label for="pointsAmount">Points (+/-)</label>
+        <input type="number" id="pointsAmount" value="1">
+      </div>
+      <div>
+        <button class="primary-btn" id="addPointsBtn">Add points</button>
+      </div>
+    </div>
+    <div class="leaderboard" id="leaderboard"></div>
+  </section>
+
+</main>
+
+<footer>Troop Tracker — data is stored only in this browser (localStorage). Export/back up as needed.</footer>
+
+<!-- Firebase (compat SDKs — simplest to use with plain script tags) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>
