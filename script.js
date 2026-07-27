@@ -188,6 +188,7 @@
   attendanceDateInput.valueAsDate = new Date();
 
   let currentAttendanceSelections = {}; // memberId -> {status, excused, lateValue, lateUnit}, for the date being edited
+  let loadedAttendanceDate = null; // which date's saved records are currently loaded into currentAttendanceSelections
 
   // A record may be stored either as a plain string (older saves, before
   // this feature existed) or as an object with extra detail. This always
@@ -198,17 +199,31 @@
     return record;
   }
 
-  function renderAttendanceView(){
-    const wrap = document.getElementById('attendanceGroups');
-    wrap.innerHTML = '';
-    const dateStr = attendanceDateInput.value;
+  function loadSelectionsForDate(dateStr){
     const existing = data.attendance.find(a=>a.date===dateStr);
-    currentAttendanceSelections = {};
+    const selections = {};
     if(existing){
       Object.entries(existing.records).forEach(([memberId, record])=>{
-        currentAttendanceSelections[memberId] = {...normalizeRecord(record)};
+        selections[memberId] = {...normalizeRecord(record)};
       });
     }
+    return selections;
+  }
+
+  function renderAttendanceView(){
+    const wrap = document.getElementById('attendanceGroups');
+    const dateStr = attendanceDateInput.value;
+
+    // Only pull fresh from saved data when we've switched to a different
+    // date. Re-rendering after a button click (same date) must NOT touch
+    // currentAttendanceSelections, or every click would immediately erase
+    // itself before it ever showed as selected.
+    if(loadedAttendanceDate !== dateStr){
+      currentAttendanceSelections = loadSelectionsForDate(dateStr);
+      loadedAttendanceDate = dateStr;
+    }
+
+    wrap.innerHTML = '';
 
     data.groups.forEach(group=>{
       const div = document.createElement('div');
