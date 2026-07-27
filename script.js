@@ -1,5 +1,6 @@
 (function(){
-  const DB_PATH = 'troopTrackerData';
+  const COLLECTION = 'troopTracker';
+  const DOC_ID = 'data';
 
   function defaultData(){
     return {
@@ -14,15 +15,17 @@
   }
 
   let data = defaultData();
-  let dbRef = null;
+  let docRef = null;
   let firstLoadHandled = false;
 
   function saveData(){
-    if(!dbRef){
+    if(!docRef){
       console.warn('Not connected yet — change was not saved.');
       return;
     }
-    dbRef.set(data).catch(e=>{
+    // Firestore documents can't store nested arrays directly, so the
+    // whole data object is JSON-stringified into a single field.
+    docRef.set({ json: JSON.stringify(data) }).catch(e=>{
       console.error('Could not save data', e);
       showStatus('Could not save — check your connection.', true);
     });
@@ -59,11 +62,16 @@
 
     firebase.auth().onAuthStateChanged(user=>{
       if(!user) return;
-      dbRef = firebase.database().ref(DB_PATH);
-      dbRef.on('value', snapshot=>{
-        const val = snapshot.val();
-        if(val && Array.isArray(val.groups) && val.groups.length){
-          data = val;
+      docRef = firebase.firestore().collection(COLLECTION).doc(DOC_ID);
+      docRef.onSnapshot(snapshot=>{
+        const snap = snapshot.data();
+        let parsed = null;
+        if(snap && typeof snap.json === 'string'){
+          try{ parsed = JSON.parse(snap.json); }
+          catch(e){ console.error('Could not parse stored data', e); }
+        }
+        if(parsed && Array.isArray(parsed.groups) && parsed.groups.length){
+          data = parsed;
           if(!Array.isArray(data.attendance)) data.attendance = [];
         } else if(!firstLoadHandled){
           // Nothing in the database yet — seed it with the defaults.
@@ -75,7 +83,7 @@
         renderAll();
       }, err=>{
         console.error('Database read failed', err);
-        showStatus('Could not connect to the database. Check your Firebase rules and config.', true);
+        showStatus('Could not connect to the database. Check your Firestore rules and config.', true);
       });
     });
 

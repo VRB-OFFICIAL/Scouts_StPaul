@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The whole app's data lives in one document:
+    // collection "troopTracker" -> document "data"
+    match /troopTracker/data {
+      allow read, write: if request.auth != null;
+    }
+
+    // Everything else is locked down.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
