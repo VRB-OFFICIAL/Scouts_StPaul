@@ -83,13 +83,13 @@
         renderAll();
       }, err=>{
         console.error('Database read failed', err);
-        showStatus('Could not connect to the database. Check your Firestore rules and config.', true);
+        showStatus('Database error: ' + (err.code || err.message || err), true);
       });
     });
 
     firebase.auth().signInAnonymously().catch(e=>{
       console.error('Auth failed', e);
-      showStatus('Could not sign in. Check that Anonymous auth is enabled in Firebase.', true);
+      showStatus('Sign-in error: ' + (e.code || e.message || e), true);
     });
   }
 
@@ -187,14 +187,28 @@
   const attendanceDateInput = document.getElementById('attendanceDate');
   attendanceDateInput.valueAsDate = new Date();
 
-  let currentAttendanceSelections = {}; // memberId -> status, for the date being edited
+  let currentAttendanceSelections = {}; // memberId -> {status, excused, lateValue, lateUnit}, for the date being edited
+
+  // A record may be stored either as a plain string (older saves, before
+  // this feature existed) or as an object with extra detail. This always
+  // returns the object form so the rest of the code has one shape to deal with.
+  function normalizeRecord(record){
+    if(!record) return {status:''};
+    if(typeof record === 'string') return {status: record};
+    return record;
+  }
 
   function renderAttendanceView(){
     const wrap = document.getElementById('attendanceGroups');
     wrap.innerHTML = '';
     const dateStr = attendanceDateInput.value;
     const existing = data.attendance.find(a=>a.date===dateStr);
-    currentAttendanceSelections = existing ? {...existing.records} : {};
+    currentAttendanceSelections = {};
+    if(existing){
+      Object.entries(existing.records).forEach(([memberId, record])=>{
+        currentAttendanceSelections[memberId] = {...normalizeRecord(record)};
+      });
+    }
 
     data.groups.forEach(group=>{
       const div = document.createElement('div');
@@ -202,14 +216,35 @@
       div.innerHTML = `
         <h3>${escapeHtml(group.name)}</h3>
         ${group.members.length ? group.members.map(m=>{
-          const status = currentAttendanceSelections[m.id] || '';
+          const sel = normalizeRecord(currentAttendanceSelections[m.id]);
+          const status = sel.status || '';
+          const excused = sel.excused;
+          const lateValue = sel.lateValue || '';
+          const lateUnit = sel.lateUnit || 'minutes';
           return `
-          <div class="attendance-row">
-            <span class="a-name">${escapeHtml(m.name)}</span>
-            <div class="status-btns">
-              <button class="status-btn present ${status==='present'?'selected':''}" data-member="${m.id}" data-status="present">Present</button>
-              <button class="status-btn late ${status==='late'?'selected':''}" data-member="${m.id}" data-status="late">Late</button>
-              <button class="status-btn absent ${status==='absent'?'selected':''}" data-member="${m.id}" data-status="absent">Absent</button>
+          <div class="attendance-row-group">
+            <div class="attendance-row">
+              <span class="a-name">${escapeHtml(m.name)}</span>
+              <div class="status-btns">
+                <button class="status-btn present ${status==='present'?'selected':''}" data-member="${m.id}" data-status="present">Present</button>
+                <button class="status-btn late ${status==='late'?'selected':''}" data-member="${m.id}" data-status="late">Late</button>
+                <button class="status-btn absent ${status==='absent'?'selected':''}" data-member="${m.id}" data-status="absent">Absent</button>
+              </div>
+            </div>
+            <div class="detail-row absent-detail ${status==='absent'?'show':''}" data-member="${m.id}">
+              <span class="detail-label">Reason:</span>
+              <div class="sub-btns">
+                <button class="sub-btn excused ${excused===true?'selected':''}" data-member="${m.id}" data-excused="true">With excuse</button>
+                <button class="sub-btn unexcused ${excused===false?'selected':''}" data-member="${m.id}" data-excused="false">Without excuse</button>
+              </div>
+            </div>
+            <div class="detail-row late-detail ${status==='late'?'show':''}" data-member="${m.id}">
+              <span class="detail-label">Late by:</span>
+              <input type="number" min="0" class="late-amount" data-member="${m.id}" value="${escapeAttr(lateValue)}" placeholder="e.g. 15">
+              <div class="unit-btns">
+                <button class="unit-btn ${lateUnit==='minutes'?'selected':''}" data-member="${m.id}" data-unit="minutes">Minutes</button>
+                <button class="unit-btn ${lateUnit==='hours'?'selected':''}" data-member="${m.id}" data-unit="hours">Hours</button>
+              </div>
             </div>
           </div>`;
         }).join('') : '<div class="empty-msg">No one in this group yet — add people in the Groups tab.</div>'}
@@ -221,11 +256,50 @@
       btn.addEventListener('click', ()=>{
         const memberId = btn.dataset.member;
         const status = btn.dataset.status;
-        currentAttendanceSelections[memberId] = status;
-        // refresh just this row's buttons
-        const row = btn.closest('.attendance-row');
-        row.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('selected'));
-        btn.classList.add('selected');
+        const existingSel = normalizeRecord(currentAttendanceSelections[memberId]);
+        const sel = { status };
+        if(status === 'absent' && existingSel.status === 'absent') sel.excused = existingSel.excused;
+        if(status === 'late' && existingSel.status === 'late'){
+          sel.lateValue = existingSel.lateValue;
+          sel.lateUnit = existingSel.lateUnit || 'minutes';
+        }
+        if(status === 'late' && !sel.lateUnit) sel.lateUnit = 'minutes';
+        currentAttendanceSelections[memberId] = sel;
+        renderAttendanceView();
+      });
+    });
+
+    wrap.querySelectorAll('.sub-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const memberId = btn.dataset.member;
+        const sel = normalizeRecord(currentAttendanceSelections[memberId]);
+        sel.status = 'absent';
+        sel.excused = btn.dataset.excused === 'true';
+        currentAttendanceSelections[memberId] = sel;
+        renderAttendanceView();
+      });
+    });
+
+    wrap.querySelectorAll('.unit-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const memberId = btn.dataset.member;
+        const sel = normalizeRecord(currentAttendanceSelections[memberId]);
+        sel.status = 'late';
+        sel.lateUnit = btn.dataset.unit;
+        currentAttendanceSelections[memberId] = sel;
+        renderAttendanceView();
+      });
+    });
+
+    wrap.querySelectorAll('.late-amount').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const memberId = inp.dataset.member;
+        const sel = normalizeRecord(currentAttendanceSelections[memberId]);
+        sel.status = 'late';
+        sel.lateValue = inp.value;
+        if(!sel.lateUnit) sel.lateUnit = 'minutes';
+        currentAttendanceSelections[memberId] = sel;
+        // no re-render here — keeps focus in the input while typing
       });
     });
 
@@ -257,6 +331,20 @@
     return 'Unknown';
   }
 
+  function formatRecordLabel(name, record){
+    const sel = normalizeRecord(record);
+    if(sel.status === 'absent'){
+      const excuseLabel = sel.excused === true ? 'excused' : sel.excused === false ? 'unexcused' : '';
+      return excuseLabel ? `${name} · ${excuseLabel}` : name;
+    }
+    if(sel.status === 'late' && sel.lateValue){
+      const unit = sel.lateUnit || 'minutes';
+      const unitLabel = unit === 'hours' ? 'hr' : 'min';
+      return `${name} · ${sel.lateValue}${unitLabel}`;
+    }
+    return name;
+  }
+
   function renderHistory(){
     const list = document.getElementById('historyList');
     if(data.attendance.length===0){
@@ -264,9 +352,11 @@
       return;
     }
     list.innerHTML = data.attendance.map(entry=>{
-      const tags = Object.entries(entry.records).map(([memberId,status])=>
-        `<span class="tag ${status}">${escapeHtml(findMemberName(memberId))}</span>`
-      ).join('');
+      const tags = Object.entries(entry.records).map(([memberId,record])=>{
+        const sel = normalizeRecord(record);
+        const label = formatRecordLabel(findMemberName(memberId), record);
+        return `<span class="tag ${sel.status}">${escapeHtml(label)}</span>`;
+      }).join('');
       return `<div class="history-entry"><span class="h-date">${entry.date}</span>${tags || '<span class="empty-msg">No records</span>'}</div>`;
     }).join('');
   }
