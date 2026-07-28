@@ -2,97 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
-      return request.auth != null &&
-        request.auth.token.email in ['kokomona946@gmail.com', 'kokomina946@gmail.com'];
+    // Troop Tracker app data: one shared doc, everyone signed in (including
+    // anonymous sign-in, which is what this app uses) can read and write it.
+    match /troopTracker/{docId} {
+      allow read, write: if request.auth != null;
     }
 
-    // blocks "dev", "owner", "admin", "developer", "helper" (any case, anywhere
-    // in the name) from being claimed by anyone except the two admin emails.
-    function isReservedUsername(name) {
-      return name.lower().matches('.*(dev|owner|admin|developer|helper).*');
-    }
-
-    // chat: read is open to everyone, but posting requires a signed-in,
-    // verified username — the posted name must match the caller's own.
-    match /messages/{id} {
-      allow read: if true;
-      allow create: if request.auth != null
-                    && request.resource.data.name ==
-                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.username
-                    && request.resource.data.text is string
-                    && request.resource.data.text.size() > 0
-                    && request.resource.data.text.size() <= 500;
-      allow update, delete: if isAdmin();
-    }
-
-    // kills leaderboard: everyone can view, only admin can add/edit/delete
-    match /leaderboard_kills/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // skill rank leaderboard: everyone can view, only admin can add/edit/delete
-    match /leaderboard_skill/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // user profiles: no email is ever stored or exposed here.
-    // once a username is set, it can never be changed via this doc.
-    // reserved words in a claimed username are blocked unless the caller is admin.
-    match /users/{uid} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == uid
-                    && (!('username' in request.resource.data)
-                        || !isReservedUsername(request.resource.data.username)
-                        || isAdmin());
-      allow update: if request.auth != null && request.auth.uid == uid
-                    && (!('username' in resource.data)
-                        || request.resource.data.username == resource.data.username)
-                    && (!('username' in request.resource.data)
-                        || !isReservedUsername(request.resource.data.username)
-                        || isAdmin());
-    }
-
-    // username registry: one doc per lowercase username, permanently claimed.
-    // "create" only succeeds if nobody already owns that name; it can never
-    // be updated or deleted, which is what makes usernames permanent.
-    // reserved words are blocked unless the caller is admin.
-    match /usernames/{uname} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.uid == request.auth.uid
-                    && !exists(/databases/$(database)/documents/usernames/$(uname))
-                    && (!isReservedUsername(uname) || isAdmin());
-      allow update, delete: if false;
-    }
-
-    // parent DM doc: holds participants + a preview, so each user can list
-    // their own conversation history without searching every time.
-    match /dms/{convoId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
-      allow create, update: if request.auth != null
-                            && convoId.split('_').size() == 2
-                            && convoId.split('_').hasAny([request.auth.uid])
-                            && request.resource.data.participants == convoId.split('_');
-      allow delete: if false;
-    }
-
-    // private 1-on-1 DMs. Convo id is "<uidA>_<uidB>" (sorted), so only the
-    // two participants' uids ever appear in it — anyone else is rejected.
-    match /dms/{convoId}/messages/{msgId} {
-      allow read: if request.auth != null
-                  && convoId.split('_').size() == 2
-                  && convoId.split('_').hasAny([request.auth.uid]);
-      allow create: if request.auth != null
-                    && convoId.split('_').size() == 2
-                    && convoId.split('_').hasAny([request.auth.uid])
-                    && request.resource.data.senderId == request.auth.uid
-                    && request.resource.data.text is string
-                    && request.resource.data.text.size() > 0
-                    && request.resource.data.text.size() <= 500;
-      allow update, delete: if false;
-    }
+    // Everything else is denied by default.
   }
 }
