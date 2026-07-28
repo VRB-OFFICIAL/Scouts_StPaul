@@ -359,6 +359,10 @@
     const dateStr = attendanceDateInput.value;
     if(!dateStr) return;
     const existingIdx = data.attendance.findIndex(a=>a.date===dateStr);
+    if(existingIdx>-1 && data.attendance[existingIdx].locked){
+      alert('This meeting is locked. Unlock it in "Past meetings" before making changes.');
+      return;
+    }
     const record = {date: dateStr, records: {...currentAttendanceSelections}};
     if(existingIdx>-1) data.attendance[existingIdx] = record;
     else data.attendance.push(record);
@@ -406,8 +410,42 @@
         const label = formatRecordLabel(findMemberName(memberId), record);
         return `<span class="tag ${sel.status}">${escapeHtml(label)}</span>`;
       }).join('');
-      return `<div class="history-entry"><span class="h-date">${entry.date}</span>${tags || '<span class="empty-msg">No records</span>'}</div>`;
+      const locked = !!entry.locked;
+      return `
+      <div class="history-entry ${locked?'locked':''}">
+        <div class="history-entry-header">
+          <span class="h-date">${entry.date}${locked ? ' <span class="lock-label">Locked</span>' : ''}</span>
+          <div class="history-entry-actions">
+            <button class="icon-btn lock-btn" data-lock-date="${entry.date}" title="${locked?'Unlock this meeting':'Lock this meeting'}">${locked?'🔒':'🔓'}</button>
+            <button class="icon-btn delete-btn" data-delete-date="${entry.date}" title="${locked?'Locked — unlock to delete':'Delete this meeting'}" ${locked?'disabled':''}>✕</button>
+          </div>
+        </div>
+        <div class="history-tags">${tags || '<span class="empty-msg">No records</span>'}</div>
+      </div>`;
     }).join('');
+
+    list.querySelectorAll('.lock-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const date = btn.dataset.lockDate;
+        const entry = data.attendance.find(a=>a.date===date);
+        if(!entry) return;
+        entry.locked = !entry.locked;
+        saveData();
+        renderHistory();
+      });
+    });
+
+    list.querySelectorAll('.delete-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const date = btn.dataset.deleteDate;
+        const entry = data.attendance.find(a=>a.date===date);
+        if(!entry || entry.locked) return; // locked meetings can't be deleted
+        if(!confirm(`Delete the attendance record for ${date}? This can't be undone.`)) return;
+        data.attendance = data.attendance.filter(a=>a.date!==date);
+        saveData();
+        renderHistory();
+      });
+    });
   }
 
   // ---------- POINTS VIEW ----------
