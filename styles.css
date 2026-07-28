@@ -270,7 +270,17 @@
     flex-wrap:wrap;
   }
   .attendance-row:last-child{border-bottom:none;}
+  .attendance-row-group:last-child .attendance-row{border-bottom:1px solid var(--navy-700);}
+  .attendance-row-group:last-child .detail-row:not(.show){border-bottom:none;}
   .attendance-row .a-name{flex:1; min-width:120px;}
+  .a-summary{
+    font-size:0.82rem;
+    font-weight:600;
+    opacity:0.9;
+  }
+  .a-summary.present{color:var(--present);}
+  .a-summary.late{color:var(--late);}
+  .a-summary.absent{color:var(--absent);}
   .status-btns{display:flex; gap:6px;}
   .status-btn{
     border:1px solid var(--navy-600);
@@ -286,6 +296,39 @@
   .status-btn.late.selected{background:var(--late); border-color:var(--late); opacity:1; color:#fff;}
   .status-btn.absent.selected{background:var(--absent); border-color:var(--absent); opacity:1; color:#fff;}
   .status-btn:hover{opacity:0.9;}
+  .detail-row{
+    display:none;
+    align-items:center;
+    gap:10px;
+    padding:8px 0 10px 0;
+    border-bottom:1px solid var(--navy-700);
+    flex-wrap:wrap;
+  }
+  .detail-row.show{display:flex;}
+  .detail-label{font-size:0.8rem; color:var(--gold-100); opacity:0.75;}
+  .sub-btns, .unit-btns{display:flex; gap:6px;}
+  .sub-btn, .unit-btn{
+    border:1px solid var(--navy-600);
+    background:var(--navy-900);
+    color:var(--cream);
+    padding:5px 11px;
+    border-radius:16px;
+    font-size:0.75rem;
+    cursor:pointer;
+    opacity:0.6;
+  }
+  .sub-btn.selected{background:var(--absent); border-color:var(--absent); opacity:1; color:#fff;}
+  .unit-btn.selected{background:var(--late); border-color:var(--late); opacity:1; color:#fff;}
+  .sub-btn:hover, .unit-btn:hover{opacity:0.9;}
+  .late-amount{
+    width:72px;
+    padding:6px 8px;
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    border-radius:5px;
+    color:var(--cream);
+    font-size:0.85rem;
+  }
   .save-bar{margin-top:10px; text-align:right;}
   #attendanceSavedMsg{
     color:var(--gold-300);

@@ -210,6 +210,26 @@
     return selections;
   }
 
+  // Compact "Present" / "Late · 15 Mins" / "Absent · Excused" summary text
+  // shown next to each name, live, as selections are made.
+  function statusSummaryText(sel){
+    if(!sel || !sel.status) return '';
+    if(sel.status === 'present') return 'Present';
+    if(sel.status === 'late'){
+      if(sel.lateValue){
+        const unit = sel.lateUnit === 'hours' ? 'Hrs' : 'Mins';
+        return `Late · ${sel.lateValue} ${unit}`;
+      }
+      return 'Late';
+    }
+    if(sel.status === 'absent'){
+      if(sel.excused === true) return 'Absent · Excused';
+      if(sel.excused === false) return 'Absent · Unexcused';
+      return 'Absent';
+    }
+    return '';
+  }
+
   function renderAttendanceView(){
     const wrap = document.getElementById('attendanceGroups');
     const dateStr = attendanceDateInput.value;
@@ -236,10 +256,11 @@
           const excused = sel.excused;
           const lateValue = sel.lateValue || '';
           const lateUnit = sel.lateUnit || 'minutes';
+          const summary = statusSummaryText(sel);
           return `
           <div class="attendance-row-group">
             <div class="attendance-row">
-              <span class="a-name">${escapeHtml(m.name)}</span>
+              <span class="a-name">${escapeHtml(m.name)}${summary ? ` <span class="a-summary ${status}">· ${escapeHtml(summary)}</span>` : ''}</span>
               <div class="status-btns">
                 <button class="status-btn present ${status==='present'?'selected':''}" data-member="${m.id}" data-status="present">Present</button>
                 <button class="status-btn late ${status==='late'?'selected':''}" data-member="${m.id}" data-status="late">Late</button>
@@ -314,7 +335,20 @@
         sel.lateValue = inp.value;
         if(!sel.lateUnit) sel.lateUnit = 'minutes';
         currentAttendanceSelections[memberId] = sel;
-        // no re-render here — keeps focus in the input while typing
+        // Update just this row's summary text directly (no full re-render,
+        // so the input keeps focus while the person is still typing).
+        const row = inp.closest('.attendance-row-group').querySelector('.attendance-row');
+        let summaryEl = row.querySelector('.a-summary');
+        const summaryText = statusSummaryText(sel);
+        if(summaryText){
+          if(!summaryEl){
+            summaryEl = document.createElement('span');
+            row.querySelector('.a-name').appendChild(document.createTextNode(' '));
+            row.querySelector('.a-name').appendChild(summaryEl);
+          }
+          summaryEl.className = 'a-summary late';
+          summaryEl.textContent = '· ' + summaryText;
+        }
       });
     });
 
