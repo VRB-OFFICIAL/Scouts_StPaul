@@ -449,6 +449,87 @@
     margin-top:50px;
   }
   .empty-msg{opacity:0.5; font-style:italic; font-size:0.9rem; padding:8px 0;}
+
+  /* Groups Breakdown view */
+  #breakdownGroups{display:flex; flex-direction:column; gap:20px;}
+  .bd-group{
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .bd-group-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-bottom:2px solid var(--gold-500);
+    padding-bottom:10px;
+    margin-bottom:8px;
+  }
+  .bd-group-header h3{color:var(--gold-300); margin:0; font-size:1.15rem;}
+  .bd-stats{display:flex; gap:10px; font-size:0.85rem; font-weight:700;}
+  .bd-stat.gained{color:var(--present);}
+  .bd-stat.lost{color:var(--absent);}
+  .bd-stat.net{color:var(--gold-300);}
+  .bd-member{border-bottom:1px solid var(--navy-700);}
+  .bd-member:last-child{border-bottom:none;}
+  .bd-member-row{
+    width:100%;
+    background:none;
+    border:none;
+    color:var(--cream);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 0;
+    cursor:pointer;
+    font-size:0.95rem;
+    font-family:inherit;
+  }
+  .bd-caret{opacity:0.5; font-size:0.75rem; margin-left:4px;}
+  .bd-log{display:none; padding:0 0 14px 0;}
+  .bd-log.show{display:block;}
+  .bd-log-entry{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:6px 0;
+    border-bottom:1px solid var(--navy-700);
+    font-size:0.85rem;
+  }
+  .bd-log-date{color:var(--gold-100); opacity:0.7; min-width:90px;}
+  .bd-log-reason{flex:1; opacity:0.9;}
+  .bd-log-amount{font-weight:700; min-width:36px; text-align:right;}
+  .bd-log-amount.gained{color:var(--present);}
+  .bd-log-amount.lost{color:var(--absent);}
+  .bd-add-row{
+    display:flex;
+    gap:6px;
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  .bd-add-row input{
+    padding:7px 9px;
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    border-radius:5px;
+    color:var(--cream);
+    font-size:0.85rem;
+  }
+  .bd-add-date{width:135px;}
+  .bd-add-amount{width:90px;}
+  .bd-add-reason{flex:1; min-width:120px;}
+  .bd-add-btn{
+    background:var(--gold-500);
+    border:none;
+    color:var(--navy-950);
+    font-weight:700;
+    padding:7px 14px;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .bd-add-btn:hover{background:var(--gold-300);}
   @media (max-width:600px){
     header h1{font-size:1.5rem;}
     .points-form{flex-direction:column; align-items:stretch;}

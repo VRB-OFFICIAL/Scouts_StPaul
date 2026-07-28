@@ -34,6 +34,41 @@
   let uidCounter = Date.now();
   function uid(){ uidCounter += 1; return 'm' + uidCounter; }
 
+  function migrateData(d){
+    d.groups.forEach(g=>{
+      g.members.forEach(m=>{
+        if(!Array.isArray(m.pointLog)){
+          m.pointLog = [];
+          // Carry over any pre-existing plain point total as one dated entry,
+          // so nobody's history/totals appear to reset when this ships.
+          if(typeof m.points === 'number' && m.points !== 0){
+            m.pointLog.push({
+              id: uid(),
+              date: new Date().toISOString().slice(0,10),
+              amount: m.points,
+              reason: 'Carried over from before point history was tracked'
+            });
+          }
+        }
+        delete m.points;
+      });
+    });
+    return d;
+  }
+
+  // A member's points now live entirely in m.pointLog — an array of
+  // {id, date, amount, reason}. Gained/lost/net are always derived from it,
+  // never stored separately, so they can never drift out of sync.
+  function memberTotals(member){
+    const log = Array.isArray(member.pointLog) ? member.pointLog : [];
+    let gained = 0, lost = 0;
+    log.forEach(e=>{
+      if(e.amount > 0) gained += e.amount;
+      else lost += -e.amount;
+    });
+    return { gained, lost, net: gained - lost };
+  }
+
   // ---------- STATUS BANNER ----------
   function showStatus(msg, isError){
     const el = document.getElementById('connectionStatus');
@@ -71,7 +106,7 @@
           catch(e){ console.error('Could not parse stored data', e); }
         }
         if(parsed && Array.isArray(parsed.groups) && parsed.groups.length){
-          data = parsed;
+          data = migrateData(parsed);
           if(!Array.isArray(data.attendance)) data.attendance = [];
         } else if(!firstLoadHandled){
           // Nothing in the database yet — seed it with the defaults.
@@ -99,6 +134,7 @@
     const activeView = activeBtn ? activeBtn.dataset.view : 'groups';
     if(activeView === 'attendance') renderAttendanceView();
     if(activeView === 'points') renderPointsView();
+    if(activeView === 'breakdown') renderBreakdownView();
   }
 
   // ---------- NAV ----------
@@ -111,6 +147,7 @@
       document.getElementById('view-' + btn.dataset.view).classList.add('active');
       if(btn.dataset.view === 'attendance') renderAttendanceView();
       if(btn.dataset.view === 'points') renderPointsView();
+      if(btn.dataset.view === 'breakdown') renderBreakdownView();
     });
   });
 
@@ -119,7 +156,7 @@
     const grid = document.getElementById('groupsGrid');
     grid.innerHTML = '';
     data.groups.forEach(group=>{
-      const total = group.members.reduce((s,m)=>s+m.points,0);
+      const total = group.members.reduce((s,m)=>s+memberTotals(m).net,0);
       const card = document.createElement('div');
       card.className = 'crest';
       card.innerHTML = `
@@ -133,7 +170,7 @@
             ${group.members.length ? group.members.map(m=>`
               <li>
                 <span class="member-name">${escapeHtml(m.name)}</span>
-                <span class="member-points">${m.points}</span>
+                <span class="member-points">${memberTotals(m).net}</span>
                 <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
               </li>
             `).join('') : '<li class="empty-msg">No one added yet</li>'}
@@ -163,7 +200,7 @@
         const name = input.value.trim();
         if(!name) return;
         const g = data.groups.find(g=>g.id===groupId);
-        g.members.push({id:uid(), name, points:0});
+        g.members.push({id:uid(), name, pointLog:[]});
         saveData();
         renderGroups();
       };
@@ -470,10 +507,20 @@
     const g = data.groups.find(g=>g.id===pointsGroupSelect.value);
     const memberId = pointsMemberSelect.value;
     const amount = parseInt(document.getElementById('pointsAmount').value, 10) || 0;
+    const reasonInput = document.getElementById('pointsReason');
+    const reason = reasonInput ? reasonInput.value.trim() : '';
     if(!g || !memberId || amount===0) return;
     const m = g.members.find(m=>m.id===memberId);
-    m.points += amount;
+    if(!Array.isArray(m.pointLog)) m.pointLog = [];
+    m.pointLog.push({
+      id: uid(),
+      date: new Date().toISOString().slice(0,10),
+      amount,
+      reason: reason || (amount>0 ? 'Points added' : 'Points deducted')
+    });
     saveData();
+    document.getElementById('pointsAmount').value = 1;
+    if(reasonInput) reasonInput.value = '';
     renderLeaderboard();
     renderGroups();
   });
@@ -481,17 +528,155 @@
   function renderLeaderboard(){
     const board = document.getElementById('leaderboard');
     board.innerHTML = data.groups.map(g=>{
-      const total = g.members.reduce((s,m)=>s+m.points,0);
-      const sorted = [...g.members].sort((a,b)=>b.points-a.points);
+      const total = g.members.reduce((s,m)=>s+memberTotals(m).net,0);
+      const sorted = [...g.members].sort((a,b)=>memberTotals(b).net-memberTotals(a).net);
       return `
         <div class="lb-group">
           <h3>${escapeHtml(g.name)} <span class="lb-total">${total} pts</span></h3>
           ${sorted.length ? sorted.map((m,i)=>`
-            <div class="lb-row"><span><span class="rank">${i+1}.</span>${escapeHtml(m.name)}</span><span>${m.points}</span></div>
+            <div class="lb-row"><span><span class="rank">${i+1}.</span>${escapeHtml(m.name)}</span><span>${memberTotals(m).net}</span></div>
           `).join('') : '<p class="empty-msg">No one added yet</p>'}
         </div>
       `;
     }).join('');
+  }
+
+  // ---------- GROUPS BREAKDOWN VIEW ----------
+  let expandedMemberId = null; // which member's log is currently expanded, if any
+
+  function renderBreakdownView(){
+    const wrap = document.getElementById('breakdownGroups');
+    wrap.innerHTML = data.groups.map(g=>{
+      const memberRows = g.members.map(m=>{
+        const t = memberTotals(m);
+        const isOpen = expandedMemberId === m.id;
+        const log = [...(m.pointLog||[])].sort((a,b)=> a.date < b.date ? 1 : -1);
+        return `
+          <div class="bd-member">
+            <button class="bd-member-row" data-toggle-member="${m.id}">
+              <span class="bd-name">${escapeHtml(m.name)} <span class="bd-caret">${isOpen?'▾':'▸'}</span></span>
+              <span class="bd-stats">
+                <span class="bd-stat gained">+${t.gained}</span>
+                <span class="bd-stat lost">-${t.lost}</span>
+                <span class="bd-stat net">${t.net}</span>
+              </span>
+            </button>
+            <div class="bd-log ${isOpen?'show':''}">
+              ${log.length ? log.map(e=>`
+                <div class="bd-log-entry">
+                  <span class="bd-log-date">${e.date}</span>
+                  <span class="bd-log-reason">${escapeHtml(e.reason||'')}</span>
+                  <span class="bd-log-amount ${e.amount>0?'gained':'lost'}">${e.amount>0?'+':''}${e.amount}</span>
+                  <button class="icon-btn bd-edit" data-edit-entry="${m.id}|${e.id}" title="Edit">✎</button>
+                  <button class="icon-btn bd-delete" data-delete-entry="${m.id}|${e.id}" title="Delete">✕</button>
+                </div>
+              `).join('') : '<p class="empty-msg">No point history yet</p>'}
+              <div class="bd-add-row">
+                <input type="date" class="bd-add-date" data-member="${m.id}" value="${new Date().toISOString().slice(0,10)}">
+                <input type="number" class="bd-add-amount" data-member="${m.id}" placeholder="+/- amount">
+                <input type="text" class="bd-add-reason" data-member="${m.id}" placeholder="Reason">
+                <button class="bd-add-btn" data-add-entry="${m.id}">Add</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const groupTotals = g.members.reduce((acc,m)=>{
+        const t = memberTotals(m);
+        acc.gained += t.gained; acc.lost += t.lost; acc.net += t.net;
+        return acc;
+      }, {gained:0, lost:0, net:0});
+
+      return `
+        <div class="bd-group">
+          <div class="bd-group-header">
+            <h3>${escapeHtml(g.name)}</h3>
+            <span class="bd-stats">
+              <span class="bd-stat gained">+${groupTotals.gained}</span>
+              <span class="bd-stat lost">-${groupTotals.lost}</span>
+              <span class="bd-stat net">${groupTotals.net}</span>
+            </span>
+          </div>
+          ${g.members.length ? memberRows : '<p class="empty-msg">No one added yet</p>'}
+        </div>
+      `;
+    }).join('');
+
+    wrap.querySelectorAll('[data-toggle-member]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.toggleMember;
+        expandedMemberId = expandedMemberId === id ? null : id;
+        renderBreakdownView();
+      });
+    });
+
+    wrap.querySelectorAll('[data-add-entry]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const memberId = btn.dataset.addEntry;
+        const member = findMemberById(memberId);
+        if(!member) return;
+        const dateEl = wrap.querySelector(`.bd-add-date[data-member="${memberId}"]`);
+        const amountEl = wrap.querySelector(`.bd-add-amount[data-member="${memberId}"]`);
+        const reasonEl = wrap.querySelector(`.bd-add-reason[data-member="${memberId}"]`);
+        const amount = parseInt(amountEl.value, 10) || 0;
+        if(amount === 0) return;
+        if(!Array.isArray(member.pointLog)) member.pointLog = [];
+        member.pointLog.push({
+          id: uid(),
+          date: dateEl.value || new Date().toISOString().slice(0,10),
+          amount,
+          reason: reasonEl.value.trim() || (amount>0 ? 'Points added' : 'Points deducted')
+        });
+        saveData();
+        renderGroups();
+        renderBreakdownView();
+      });
+    });
+
+    wrap.querySelectorAll('[data-edit-entry]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const [memberId, entryId] = btn.dataset.editEntry.split('|');
+        const member = findMemberById(memberId);
+        const entry = member && member.pointLog.find(e=>e.id===entryId);
+        if(!entry) return;
+        const newAmount = prompt('Amount (use a minus sign for a deduction):', entry.amount);
+        if(newAmount === null) return;
+        const parsed = parseInt(newAmount, 10);
+        if(isNaN(parsed) || parsed === 0) return;
+        const newReason = prompt('Reason:', entry.reason || '');
+        if(newReason === null) return;
+        const newDate = prompt('Date (YYYY-MM-DD):', entry.date);
+        if(newDate === null) return;
+        entry.amount = parsed;
+        entry.reason = newReason.trim();
+        entry.date = newDate.trim() || entry.date;
+        saveData();
+        renderGroups();
+        renderBreakdownView();
+      });
+    });
+
+    wrap.querySelectorAll('[data-delete-entry]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const [memberId, entryId] = btn.dataset.deleteEntry.split('|');
+        const member = findMemberById(memberId);
+        if(!member) return;
+        if(!confirm('Delete this point log entry?')) return;
+        member.pointLog = member.pointLog.filter(e=>e.id!==entryId);
+        saveData();
+        renderGroups();
+        renderBreakdownView();
+      });
+    });
+  }
+
+  function findMemberById(memberId){
+    for(const g of data.groups){
+      const m = g.members.find(m=>m.id===memberId);
+      if(m) return m;
+    }
+    return null;
   }
 
   // ---------- helpers ----------

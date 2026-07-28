@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Troop Tracker — Groups, Attendance & Points</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -12,7 +12,7 @@
 
 <header>
   <h1>⚜ Troop Tracker</h1>
-  <p>Groups &middot; Attendance &middot; Points</p>
+  <p>Groups &middot; Attendance &middot; Points &middot; Breakdown</p>
   <div class="rope-divider"></div>
 </header>
 
@@ -20,6 +20,7 @@
   <button data-view="groups" class="active">Groups</button>
   <button data-view="attendance">Attendance</button>
   <button data-view="points">Points &amp; Leaderboard</button>
+  <button data-view="breakdown">Groups Breakdown</button>
 </nav>
 
 <main>
@@ -61,22 +62,31 @@
         <input type="number" id="pointsAmount" value="1">
       </div>
       <div>
+        <label for="pointsReason">Reason</label>
+        <input type="text" id="pointsReason" placeholder="e.g. helped clean up">
+      </div>
+      <div>
         <button class="primary-btn" id="addPointsBtn">Add points</button>
       </div>
     </div>
     <div class="leaderboard" id="leaderboard"></div>
   </section>
 
+  <!-- GROUPS BREAKDOWN VIEW -->
+  <section id="view-breakdown" class="view">
+    <div id="breakdownGroups"></div>
+  </section>
+
 </main>
 
-<footer>Troop Tracker — data is stored only in this browser (localStorage). Export/back up as needed.</footer>
+<footer>Troop Tracker — data is synced live across devices via Firebase.</footer>
 
 <!-- Firebase (compat SDKs — simplest to use with plain script tags) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="script.js"></script>
+<script src="script.js?v=4"></script>
 
 </body>
 </html>
