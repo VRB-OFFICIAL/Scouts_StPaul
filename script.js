@@ -37,6 +37,9 @@
   function migrateData(d){
     d.groups.forEach(g=>{
       g.members.forEach(m=>{
+        if(typeof m.role !== 'string'){
+          m.role = '';
+        }
         if(!Array.isArray(m.pointLog)){
           m.pointLog = [];
           // Carry over any pre-existing plain point total as one dated entry,
@@ -170,6 +173,7 @@
             ${group.members.length ? group.members.map(m=>`
               <li>
                 <span class="member-name">${escapeHtml(m.name)}</span>
+                <input type="text" class="member-role-input" placeholder="role..." value="${escapeAttr(m.role||'')}" data-role-member="${m.id}">
                 <span class="member-points">${memberTotals(m).net}</span>
                 <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
               </li>
@@ -192,6 +196,14 @@
       });
     });
 
+    // wire up member role edits
+    grid.querySelectorAll('[data-role-member]').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const m = findMemberById(inp.dataset.roleMember);
+        if(m){ m.role = inp.value.trim(); saveData(); }
+      });
+    });
+
     // add member buttons
     grid.querySelectorAll('[data-add-btn]').forEach(btn=>{
       const groupId = btn.dataset.addBtn;
@@ -200,7 +212,7 @@
         const name = input.value.trim();
         if(!name) return;
         const g = data.groups.find(g=>g.id===groupId);
-        g.members.push({id:uid(), name, pointLog:[]});
+        g.members.push({id:uid(), name, role:'', pointLog:[]});
         saveData();
         renderGroups();
       };
