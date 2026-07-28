@@ -390,6 +390,18 @@
   .tag.present{background:var(--present); color:#fff;}
   .tag.late{background:var(--late); color:#fff;}
   .tag.absent{background:var(--absent); color:#fff;}
+  .tag-remove{
+    background:none;
+    border:none;
+    color:inherit;
+    opacity:0.65;
+    cursor:pointer;
+    font-size:0.7rem;
+    margin-left:5px;
+    padding:0;
+    vertical-align:middle;
+  }
+  .tag-remove:hover{opacity:1;}
 
   /* Points / leaderboard view */
   .points-form{

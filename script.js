@@ -442,12 +442,13 @@
       return;
     }
     list.innerHTML = data.attendance.map(entry=>{
+      const locked = !!entry.locked;
       const tags = Object.entries(entry.records).map(([memberId,record])=>{
         const sel = normalizeRecord(record);
         const label = formatRecordLabel(findMemberName(memberId), record);
-        return `<span class="tag ${sel.status}">${escapeHtml(label)}</span>`;
+        const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
+        return `<span class="tag ${sel.status}">${escapeHtml(label)}${removeBtn}</span>`;
       }).join('');
-      const locked = !!entry.locked;
       return `
       <div class="history-entry ${locked?'locked':''}">
         <div class="history-entry-header">
@@ -479,6 +480,21 @@
         if(!entry || entry.locked) return; // locked meetings can't be deleted
         if(!confirm(`Delete the attendance record for ${date}? This can't be undone.`)) return;
         data.attendance = data.attendance.filter(a=>a.date!==date);
+        saveData();
+        renderHistory();
+      });
+    });
+
+    list.querySelectorAll('.tag-remove').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const date = btn.dataset.removeDate;
+        const memberId = btn.dataset.removeMember;
+        const entry = data.attendance.find(a=>a.date===date);
+        if(!entry || entry.locked) return; // locked meetings can't be edited
+        const name = findMemberName(memberId);
+        if(!confirm(`Remove ${name} from the ${date} meeting record?`)) return;
+        delete entry.records[memberId];
         saveData();
         renderHistory();
       });
