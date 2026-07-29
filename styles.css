@@ -200,17 +200,16 @@
     background:transparent;
     border:none;
     border-bottom:1px dashed var(--navy-600);
-    color:var(--gold-100);
+    color:var(--gold-500);
     font-size:0.78rem;
+    font-weight:600;
     font-style:italic;
-    opacity:0.85;
     padding:2px 4px;
     margin:0 6px;
   }
-  .member-role-input::placeholder{color:var(--gold-100); opacity:0.4; font-style:italic;}
+  .member-role-input::placeholder{color:var(--gold-100); opacity:0.35; font-style:italic; font-weight:400;}
   .member-role-input:hover, .member-role-input:focus{
     border-bottom:1px dashed var(--gold-500);
-    opacity:1;
     outline:none;
   }
   .member-points{
