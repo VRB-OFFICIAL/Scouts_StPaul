@@ -172,11 +172,15 @@
           <ul class="member-list">
             ${group.members.length ? group.members.map(m=>`
               <li>
-                <span class="member-name">${escapeHtml(m.name)}</span>
-                ${m.role ? `<span class="member-role">${escapeHtml(m.role)}</span>` : ''}
-                <button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>
-                <span class="member-points">${memberTotals(m).net}</span>
-                <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
+                <span class="member-name-role">
+                  <span class="member-name">${escapeHtml(m.name)}</span>
+                  ${m.role ? `<span class="member-role" style="font-size:${roleFontSize(m.role)}">${escapeHtml(m.role)}</span>` : ''}
+                </span>
+                <span class="member-actions">
+                  <span class="member-points">${memberTotals(m).net}</span>
+                  <button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>
+                  <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
+                </span>
               </li>
             `).join('') : '<li class="empty-msg">No one added yet</li>'}
           </ul>
@@ -714,6 +718,17 @@
   }
 
   // ---------- helpers ----------
+  // Longer role text gets progressively smaller so it never crowds out
+  // the name or points, while short roles like "Leader" stay easy to read.
+  function roleFontSize(role){
+    const len = role.length;
+    if(len <= 8) return '0.78rem';
+    if(len <= 14) return '0.7rem';
+    if(len <= 20) return '0.63rem';
+    if(len <= 28) return '0.57rem';
+    return '0.52rem';
+  }
+
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
   }

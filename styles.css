@@ -193,20 +193,34 @@
     font-size:0.95rem;
   }
   .member-list li:last-child{border-bottom:none;}
-  .member-name{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .member-name-role{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex:1 1 auto;
+    min-width:0;
+    overflow:hidden;
+  }
+  .member-name{flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .member-role{
-    flex:0 0 auto;
+    flex:0 1 auto;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
     color:var(--gold-500);
-    font-size:0.78rem;
     font-weight:600;
     font-style:italic;
-    margin:0 6px;
     white-space:nowrap;
+  }
+  .member-actions{
+    display:flex;
+    align-items:center;
+    flex:0 0 auto;
+    margin-left:10px;
   }
   .role-edit-btn{
     font-size:0.85rem;
     padding:2px 4px;
-    margin-right:4px;
   }
   .member-points{
     color:var(--gold-300);
