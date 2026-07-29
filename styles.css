@@ -194,23 +194,19 @@
   }
   .member-list li:last-child{border-bottom:none;}
   .member-name{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .member-role-input{
-    width:88px;
+  .member-role{
     flex:0 0 auto;
-    background:transparent;
-    border:none;
-    border-bottom:1px dashed var(--navy-600);
     color:var(--gold-500);
     font-size:0.78rem;
     font-weight:600;
     font-style:italic;
-    padding:2px 4px;
     margin:0 6px;
+    white-space:nowrap;
   }
-  .member-role-input::placeholder{color:var(--gold-100); opacity:0.35; font-style:italic; font-weight:400;}
-  .member-role-input:hover, .member-role-input:focus{
-    border-bottom:1px dashed var(--gold-500);
-    outline:none;
+  .role-edit-btn{
+    font-size:0.85rem;
+    padding:2px 4px;
+    margin-right:4px;
   }
   .member-points{
     color:var(--gold-300);

@@ -173,7 +173,8 @@
             ${group.members.length ? group.members.map(m=>`
               <li>
                 <span class="member-name">${escapeHtml(m.name)}</span>
-                <input type="text" class="member-role-input" placeholder="role..." value="${escapeAttr(m.role||'')}" data-role-member="${m.id}">
+                ${m.role ? `<span class="member-role">${escapeHtml(m.role)}</span>` : ''}
+                <button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>
                 <span class="member-points">${memberTotals(m).net}</span>
                 <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
               </li>
@@ -197,10 +198,15 @@
     });
 
     // wire up member role edits
-    grid.querySelectorAll('[data-role-member]').forEach(inp=>{
-      inp.addEventListener('change', ()=>{
-        const m = findMemberById(inp.dataset.roleMember);
-        if(m){ m.role = inp.value.trim(); saveData(); }
+    grid.querySelectorAll('[data-edit-role]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const m = findMemberById(btn.dataset.editRole);
+        if(!m) return;
+        const newRole = prompt('Role (e.g. Leader, 2nd in Command, 1st Year):', m.role || '');
+        if(newRole === null) return;
+        m.role = newRole.trim();
+        saveData();
+        renderGroups();
       });
     });
 
