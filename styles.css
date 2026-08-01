@@ -274,13 +274,15 @@
     margin-bottom:24px;
   }
   .attendance-controls label{font-size:0.9rem; color:var(--gold-100);}
-  .attendance-controls input[type=date]{
+  .attendance-controls input[type=date],
+  .attendance-controls input[type=number]{
     background:var(--navy-800);
     border:1px solid var(--navy-700);
     color:var(--cream);
     padding:8px 10px;
     border-radius:5px;
   }
+  #attendanceMaxPoints{width:70px;}
   .attendance-group{
     background:var(--navy-800);
     border:1px solid var(--navy-700);
@@ -309,6 +311,24 @@
   .a-summary.present{color:var(--present);}
   .a-summary.late{color:var(--late);}
   .a-summary.absent{color:var(--absent);}
+  .uniform-tools-inputs{display:flex; gap:10px; flex-wrap:wrap;}
+  .ut-label{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    font-size:0.78rem;
+    color:var(--gold-100);
+    opacity:0.85;
+  }
+  .ut-input{
+    width:48px;
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    border-radius:5px;
+    color:var(--cream);
+    padding:5px 6px;
+    font-size:0.85rem;
+  }
   .status-btns{display:flex; gap:6px;}
   .status-btn{
     border:1px solid var(--navy-600);
@@ -418,6 +438,19 @@
   .tag.present{background:var(--present); color:#fff;}
   .tag.late{background:var(--late); color:#fff;}
   .tag.absent{background:var(--absent); color:#fff;}
+  .tag.ut-tag{
+    background:var(--navy-700);
+    border:1px solid var(--gold-500);
+    color:var(--gold-300);
+    font-weight:600;
+  }
+  .h-max-points{
+    font-size:0.75rem;
+    font-weight:400;
+    color:var(--gold-100);
+    opacity:0.7;
+    margin-left:8px;
+  }
   .tag-remove{
     background:none;
     border:none;

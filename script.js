@@ -245,9 +245,11 @@
   // ---------- ATTENDANCE VIEW ----------
   const attendanceDateInput = document.getElementById('attendanceDate');
   attendanceDateInput.valueAsDate = new Date();
+  const attendanceMaxPointsInput = document.getElementById('attendanceMaxPoints');
 
-  let currentAttendanceSelections = {}; // memberId -> {status, excused, lateValue, lateUnit}, for the date being edited
+  let currentAttendanceSelections = {}; // memberId -> {status, excused, lateValue, lateUnit, uniform, tools}, for the date being edited
   let loadedAttendanceDate = null; // which date's saved records are currently loaded into currentAttendanceSelections
+  let currentMaxPoints = 10; // max points for uniform & tools, shared, set per meeting
 
   // A record may be stored either as a plain string (older saves, before
   // this feature existed) or as an object with extra detail. This always
@@ -267,6 +269,12 @@
       });
     }
     return selections;
+  }
+
+  function loadMaxPointsForDate(dateStr){
+    const existing = data.attendance.find(a=>a.date===dateStr);
+    if(existing && typeof existing.maxPoints === 'number') return existing.maxPoints;
+    return 10;
   }
 
   // Compact "Present" / "Late · 15 Mins" / "Absent · Excused" summary text
@@ -299,6 +307,8 @@
     // itself before it ever showed as selected.
     if(loadedAttendanceDate !== dateStr){
       currentAttendanceSelections = loadSelectionsForDate(dateStr);
+      currentMaxPoints = loadMaxPointsForDate(dateStr);
+      attendanceMaxPointsInput.value = currentMaxPoints;
       loadedAttendanceDate = dateStr;
     }
 
@@ -316,10 +326,16 @@
           const lateValue = sel.lateValue || '';
           const lateUnit = sel.lateUnit || 'minutes';
           const summary = statusSummaryText(sel);
+          const uniformVal = sel.uniform === undefined || sel.uniform === null ? '' : sel.uniform;
+          const toolsVal = sel.tools === undefined || sel.tools === null ? '' : sel.tools;
           return `
           <div class="attendance-row-group">
             <div class="attendance-row">
               <span class="a-name">${escapeHtml(m.name)}${summary ? ` <span class="a-summary ${status}">· ${escapeHtml(summary)}</span>` : ''}</span>
+              <div class="uniform-tools-inputs">
+                <label class="ut-label">Uniform <input type="number" min="0" max="${currentMaxPoints}" class="ut-input" data-member="${m.id}" data-kind="uniform" value="${escapeAttr(uniformVal)}" placeholder="/${currentMaxPoints}"></label>
+                <label class="ut-label">Tools <input type="number" min="0" max="${currentMaxPoints}" class="ut-input" data-member="${m.id}" data-kind="tools" value="${escapeAttr(toolsVal)}" placeholder="/${currentMaxPoints}"></label>
+              </div>
               <div class="status-btns">
                 <button class="status-btn present ${status==='present'?'selected':''}" data-member="${m.id}" data-status="present">Present</button>
                 <button class="status-btn late ${status==='late'?'selected':''}" data-member="${m.id}" data-status="late">Late</button>
@@ -411,8 +427,48 @@
       });
     });
 
+    wrap.querySelectorAll('.ut-input').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const memberId = inp.dataset.member;
+        const kind = inp.dataset.kind; // 'uniform' or 'tools'
+        const sel = normalizeRecord(currentAttendanceSelections[memberId]);
+        if(!sel.status) sel.status = '';
+        let val = inp.value === '' ? null : parseInt(inp.value, 10);
+        if(val !== null){
+          if(isNaN(val)) val = null;
+          else {
+            if(val < 0) val = 0;
+            if(val > currentMaxPoints) val = currentMaxPoints;
+          }
+        }
+        sel[kind] = val;
+        currentAttendanceSelections[memberId] = sel;
+      });
+      inp.addEventListener('change', ()=>{
+        // Reflect any clamping (e.g. typed value above max) back into the field
+        const memberId = inp.dataset.member;
+        const kind = inp.dataset.kind;
+        const sel = normalizeRecord(currentAttendanceSelections[memberId]);
+        const val = sel[kind];
+        inp.value = (val === undefined || val === null) ? '' : val;
+      });
+    });
+
     renderHistory();
   }
+
+  attendanceMaxPointsInput.addEventListener('change', ()=>{
+    let val = parseInt(attendanceMaxPointsInput.value, 10);
+    if(isNaN(val) || val < 0) val = 10;
+    currentMaxPoints = val;
+    attendanceMaxPointsInput.value = val;
+    // Re-clamp any already-entered uniform/tools values to the new max.
+    Object.values(currentAttendanceSelections).forEach(sel=>{
+      if(typeof sel.uniform === 'number' && sel.uniform > val) sel.uniform = val;
+      if(typeof sel.tools === 'number' && sel.tools > val) sel.tools = val;
+    });
+    renderAttendanceView();
+  });
 
   document.getElementById('saveAttendanceBtn').addEventListener('click', ()=>{
     const dateStr = attendanceDateInput.value;
@@ -422,7 +478,7 @@
       alert('This meeting is locked. Unlock it in "Past meetings" before making changes.');
       return;
     }
-    const record = {date: dateStr, records: {...currentAttendanceSelections}};
+    const record = {date: dateStr, records: {...currentAttendanceSelections}, maxPoints: currentMaxPoints};
     if(existingIdx>-1) data.attendance[existingIdx] = record;
     else data.attendance.push(record);
     data.attendance.sort((a,b)=> a.date < b.date ? 1 : -1);
@@ -457,6 +513,14 @@
     return name;
   }
 
+  function formatUniformToolsLabel(record, maxPoints){
+    const sel = normalizeRecord(record);
+    const parts = [];
+    if(typeof sel.uniform === 'number') parts.push(`Uniform ${sel.uniform}/${maxPoints}`);
+    if(typeof sel.tools === 'number') parts.push(`Tools ${sel.tools}/${maxPoints}`);
+    return parts.join(' · ');
+  }
+
   function renderHistory(){
     const list = document.getElementById('historyList');
     if(data.attendance.length===0){
@@ -465,16 +529,20 @@
     }
     list.innerHTML = data.attendance.map(entry=>{
       const locked = !!entry.locked;
+      const maxPoints = typeof entry.maxPoints === 'number' ? entry.maxPoints : 10;
       const tags = Object.entries(entry.records).map(([memberId,record])=>{
         const sel = normalizeRecord(record);
         const label = formatRecordLabel(findMemberName(memberId), record);
+        const utLabel = formatUniformToolsLabel(record, maxPoints);
         const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
-        return `<span class="tag ${sel.status}">${escapeHtml(label)}${removeBtn}</span>`;
+        const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)}${removeBtn}</span>`;
+        const utTag = utLabel ? `<span class="tag ut-tag">${escapeHtml(utLabel)}</span>` : '';
+        return mainTag + utTag;
       }).join('');
       return `
       <div class="history-entry ${locked?'locked':''}">
         <div class="history-entry-header">
-          <span class="h-date">${entry.date}${locked ? ' <span class="lock-label">Locked</span>' : ''}</span>
+          <span class="h-date">${entry.date}${locked ? ' <span class="lock-label">Locked</span>' : ''} <span class="h-max-points">Max: ${maxPoints}</span></span>
           <div class="history-entry-actions">
             <button class="icon-btn lock-btn" data-lock-date="${entry.date}" title="${locked?'Unlock this meeting':'Lock this meeting'}">${locked?'🔒':'🔓'}</button>
             <button class="icon-btn delete-btn" data-delete-date="${entry.date}" title="${locked?'Locked — unlock to delete':'Delete this meeting'}" ${locked?'disabled':''}>✕</button>
