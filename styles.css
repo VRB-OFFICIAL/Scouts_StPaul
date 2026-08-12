@@ -444,6 +444,10 @@
     color:var(--gold-300);
     font-weight:600;
   }
+  .tag-ut-inline{
+    font-weight:400;
+    opacity:0.85;
+  }
   .h-max-points{
     font-size:0.75rem;
     font-weight:400;

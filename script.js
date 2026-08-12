@@ -540,9 +540,8 @@
         const label = formatRecordLabel(findMemberName(memberId), record);
         const [uniformLabel, toolsLabel] = formatUniformToolsLabels(record, maxPoints);
         const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
-        const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)}${removeBtn}</span>`;
-        const utTags = `<span class="tag ut-tag">${escapeHtml(uniformLabel)}</span><span class="tag ut-tag">${escapeHtml(toolsLabel)}</span>`;
-        return mainTag + utTags;
+        const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)} <span class="tag-ut-inline">· ${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)}</span>${removeBtn}</span>`;
+        return mainTag;
       }).join('');
       return `
       <div class="history-entry ${locked?'locked':''}">
