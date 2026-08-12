@@ -457,6 +457,53 @@
     renderHistory();
   }
 
+  // ---------- DELETE ALL PAST MEETINGS ----------
+  // Two-step "arm" so it can't be triggered by an accidental click:
+  // 1) tap the lock icon and confirm twice to arm the red button
+  // 2) tap the red button and confirm twice to actually delete
+  // Locked meetings are never touched by this — unlock them individually
+  // (or bulk-unlock, if you add that later) if you want them gone too.
+  const armDeleteAllBtn = document.getElementById('armDeleteAllBtn');
+  const deleteAllPastBtn = document.getElementById('deleteAllPastBtn');
+  let deleteAllArmed = false;
+
+  function setDeleteAllArmed(armed){
+    deleteAllArmed = armed;
+    deleteAllPastBtn.disabled = !armed;
+    armDeleteAllBtn.textContent = armed ? '🔓' : '🔒';
+    armDeleteAllBtn.classList.toggle('armed', armed);
+    armDeleteAllBtn.title = armed
+      ? 'Armed — click again to disarm, or use "Delete all past meetings" below'
+      : 'Enable the delete-all button (requires confirming twice)';
+  }
+  setDeleteAllArmed(false);
+
+  armDeleteAllBtn.addEventListener('click', ()=>{
+    if(deleteAllArmed){
+      setDeleteAllArmed(false);
+      return;
+    }
+    if(!confirm('This will enable a button that deletes every UNLOCKED past meeting at once. Locked meetings are always kept. Continue?')) return;
+    if(!confirm('Are you sure? This step only arms the button — nothing is deleted yet.')) return;
+    setDeleteAllArmed(true);
+  });
+
+  deleteAllPastBtn.addEventListener('click', ()=>{
+    if(!deleteAllArmed) return;
+    const unlockedCount = data.attendance.filter(a=>!a.locked).length;
+    if(unlockedCount === 0){
+      alert('No unlocked meetings to delete — locked meetings are never removed by this button.');
+      setDeleteAllArmed(false);
+      return;
+    }
+    if(!confirm(`Delete all ${unlockedCount} unlocked past meeting(s)? Locked meetings will be kept. This can't be undone.`)) return;
+    if(!confirm('Final check — really delete them all now?')) return;
+    data.attendance = data.attendance.filter(a=>a.locked);
+    saveData();
+    setDeleteAllArmed(false);
+    renderHistory();
+  });
+
   attendanceMaxPointsInput.addEventListener('change', ()=>{
     let val = parseInt(attendanceMaxPointsInput.value, 10);
     if(isNaN(val) || val < 0) val = 10;

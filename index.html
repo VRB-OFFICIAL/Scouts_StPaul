@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Troop Tracker — Groups, Attendance & Points</title>
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -43,7 +43,14 @@
     <div id="attendanceGroups"></div>
 
     <div class="history">
-      <h3>Past meetings</h3>
+      <div class="history-header">
+        <h3>Past meetings</h3>
+        <div class="danger-zone">
+          <button class="icon-btn arm-btn" id="armDeleteAllBtn" type="button" title="Enable the delete-all button (requires confirming twice)">🔒</button>
+          <span class="warning-triangle" title="Deleting is permanent and cannot be undone">⚠</span>
+          <button class="danger-btn" id="deleteAllPastBtn" type="button" disabled>Delete all past meetings</button>
+        </div>
+      </div>
       <div id="historyList"></div>
     </div>
   </section>
@@ -88,7 +95,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="script.js?v=8"></script>
+<script src="script.js?v=9"></script>
 
 </body>
 </html>
