@@ -513,12 +513,17 @@
     return name;
   }
 
-  function formatUniformToolsLabel(record, maxPoints){
+  // Uniform/tools are always shown next to the name in Past meetings —
+  // if a value was never set for that member at that meeting, it's
+  // displayed as 0 rather than being left out.
+  function formatUniformToolsLabels(record, maxPoints){
     const sel = normalizeRecord(record);
-    const parts = [];
-    if(typeof sel.uniform === 'number') parts.push(`Uniform ${sel.uniform}/${maxPoints}`);
-    if(typeof sel.tools === 'number') parts.push(`Tools ${sel.tools}/${maxPoints}`);
-    return parts.join(' · ');
+    const uniformVal = typeof sel.uniform === 'number' ? sel.uniform : 0;
+    const toolsVal = typeof sel.tools === 'number' ? sel.tools : 0;
+    return [
+      `uniform · ${uniformVal}/${maxPoints}`,
+      `tools · ${toolsVal}/${maxPoints}`
+    ];
   }
 
   function renderHistory(){
@@ -533,11 +538,11 @@
       const tags = Object.entries(entry.records).map(([memberId,record])=>{
         const sel = normalizeRecord(record);
         const label = formatRecordLabel(findMemberName(memberId), record);
-        const utLabel = formatUniformToolsLabel(record, maxPoints);
+        const [uniformLabel, toolsLabel] = formatUniformToolsLabels(record, maxPoints);
         const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
         const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)}${removeBtn}</span>`;
-        const utTag = utLabel ? `<span class="tag ut-tag">${escapeHtml(utLabel)}</span>` : '';
-        return mainTag + utTag;
+        const utTags = `<span class="tag ut-tag">${escapeHtml(uniformLabel)}</span><span class="tag ut-tag">${escapeHtml(toolsLabel)}</span>`;
+        return mainTag + utTags;
       }).join('');
       return `
       <div class="history-entry ${locked?'locked':''}">
