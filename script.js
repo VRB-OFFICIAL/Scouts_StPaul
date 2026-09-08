@@ -562,14 +562,17 @@
 
   // Uniform/tools are always shown next to the name in Past meetings —
   // if a value was never set for that member at that meeting, it's
-  // displayed as 0 rather than being left out.
+  // displayed as 0 rather than being left out. "Overall" is just the
+  // sum of the two, so it moves automatically whenever either changes.
   function formatUniformToolsLabels(record, maxPoints){
     const sel = normalizeRecord(record);
     const uniformVal = typeof sel.uniform === 'number' ? sel.uniform : 0;
     const toolsVal = typeof sel.tools === 'number' ? sel.tools : 0;
+    const overallVal = uniformVal + toolsVal;
     return [
       `uniform · ${uniformVal}/${maxPoints}`,
-      `tools · ${toolsVal}/${maxPoints}`
+      `tools · ${toolsVal}/${maxPoints}`,
+      `overall · ${overallVal}`
     ];
   }
 
@@ -585,9 +588,9 @@
       const tags = Object.entries(entry.records).map(([memberId,record])=>{
         const sel = normalizeRecord(record);
         const label = formatRecordLabel(findMemberName(memberId), record);
-        const [uniformLabel, toolsLabel] = formatUniformToolsLabels(record, maxPoints);
+        const [uniformLabel, toolsLabel, overallLabel] = formatUniformToolsLabels(record, maxPoints);
         const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
-        const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)} <span class="tag-ut-inline">· ${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)}</span>${removeBtn}</span>`;
+        const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)} <span class="tag-ut-inline">· ${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)} · ${escapeHtml(overallLabel)}</span>${removeBtn}</span>`;
         return mainTag;
       }).join('');
       return `
