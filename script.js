@@ -562,17 +562,19 @@
 
   // Uniform/tools are always shown next to the name in Past meetings —
   // if a value was never set for that member at that meeting, it's
-  // displayed as 0 rather than being left out. "Overall" is just the
-  // sum of the two, so it moves automatically whenever either changes.
+  // displayed as 0 rather than being left out. "Overall" is the sum of
+  // the two, shown as a fraction out of the combined max (maxPoints*2),
+  // so it moves automatically whenever either changes.
   function formatUniformToolsLabels(record, maxPoints){
     const sel = normalizeRecord(record);
     const uniformVal = typeof sel.uniform === 'number' ? sel.uniform : 0;
     const toolsVal = typeof sel.tools === 'number' ? sel.tools : 0;
     const overallVal = uniformVal + toolsVal;
+    const overallMax = maxPoints * 2;
     return [
       `uniform · ${uniformVal}/${maxPoints}`,
       `tools · ${toolsVal}/${maxPoints}`,
-      `overall · ${overallVal}`
+      `overall · ${overallVal}/${overallMax}`
     ];
   }
 
