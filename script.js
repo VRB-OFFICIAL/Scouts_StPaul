@@ -10,7 +10,8 @@
         {id:'g3', name:'Group 3', members:[]},
         {id:'g4', name:'Group 4', members:[]}
       ],
-      attendance: [] // {date, records: {memberId: 'present'|'late'|'absent'}}
+      attendance: [], // {date, records: {memberId: 'present'|'late'|'absent'}}
+      tests: [] // {id, name, date, maxScore, scores: {memberId: number}}
     };
   }
 
@@ -111,6 +112,7 @@
         if(parsed && Array.isArray(parsed.groups) && parsed.groups.length){
           data = migrateData(parsed);
           if(!Array.isArray(data.attendance)) data.attendance = [];
+          if(!Array.isArray(data.tests)) data.tests = [];
         } else if(!firstLoadHandled){
           // Nothing in the database yet — seed it with the defaults.
           data = defaultData();
@@ -138,6 +140,8 @@
     if(activeView === 'attendance') renderAttendanceView();
     if(activeView === 'points') renderPointsView();
     if(activeView === 'breakdown') renderBreakdownView();
+    if(activeView === 'people') renderPeopleView();
+    if(activeView === 'tests') renderTestsView();
   }
 
   // ---------- NAV ----------
@@ -151,6 +155,8 @@
       if(btn.dataset.view === 'attendance') renderAttendanceView();
       if(btn.dataset.view === 'points') renderPointsView();
       if(btn.dataset.view === 'breakdown') renderBreakdownView();
+      if(btn.dataset.view === 'people') renderPeopleView();
+      if(btn.dataset.view === 'tests') renderTestsView();
     });
   });
 
@@ -839,6 +845,219 @@
       if(m) return m;
     }
     return null;
+  }
+
+  // ---------- PEOPLE VIEW (attendance stats per person) ----------
+  let expandedPersonId = null; // which member's meeting-by-meeting detail is open
+
+  // Pulls every meeting a member has a record for and boils it down into
+  // present/late/absent counts plus an average uniform+tools percentage.
+  // Percentage (not raw points) is averaged because maxPoints can change
+  // meeting to meeting, so a raw average wouldn't be comparable.
+  function computeAttendanceStats(memberId){
+    let present = 0, late = 0, absent = 0;
+    let pctSum = 0, pctCount = 0;
+    const meetings = [];
+    data.attendance.forEach(entry=>{
+      const raw = entry.records[memberId];
+      if(!raw) return;
+      const sel = normalizeRecord(raw);
+      if(sel.status === 'present') present++;
+      else if(sel.status === 'late') late++;
+      else if(sel.status === 'absent') absent++;
+
+      const maxPoints = typeof entry.maxPoints === 'number' ? entry.maxPoints : 10;
+      const uniformVal = typeof sel.uniform === 'number' ? sel.uniform : null;
+      const toolsVal = typeof sel.tools === 'number' ? sel.tools : null;
+      let overall = null, overallMax = maxPoints * 2, pct = null;
+      if(uniformVal !== null || toolsVal !== null){
+        overall = (uniformVal||0) + (toolsVal||0);
+        pct = overallMax > 0 ? (overall / overallMax * 100) : 0;
+        pctSum += pct; pctCount++;
+      }
+      meetings.push({date: entry.date, sel, uniformVal, toolsVal, overall, overallMax, pct, locked: !!entry.locked});
+    });
+    meetings.sort((a,b)=> a.date < b.date ? 1 : -1);
+    return {
+      present, late, absent,
+      totalRecorded: present + late + absent,
+      avgPercent: pctCount ? (pctSum / pctCount) : null,
+      meetings
+    };
+  }
+
+  function attendanceTendencyLabel(stats){
+    if(stats.totalRecorded === 0) return 'No meetings recorded yet';
+    if(stats.late === 0 && stats.absent === 0) return 'Always present';
+    if(stats.late > stats.absent) return 'More often late than absent';
+    if(stats.absent > stats.late) return 'More often absent than late';
+    return 'Equally late and absent';
+  }
+
+  function renderPeopleView(){
+    const wrap = document.getElementById('peopleList');
+    wrap.innerHTML = data.groups.map(g=>{
+      const rows = g.members.map(m=>{
+        const stats = computeAttendanceStats(m.id);
+        const isOpen = expandedPersonId === m.id;
+        const avgLabel = stats.avgPercent !== null ? `${Math.round(stats.avgPercent)}% avg` : 'No points yet';
+        return `
+          <div class="pp-member">
+            <button class="pp-member-row" data-toggle-person="${m.id}">
+              <span class="pp-name">${escapeHtml(m.name)} <span class="pp-caret">${isOpen?'▾':'▸'}</span></span>
+              <span class="pp-stats">
+                <span class="pp-stat avg">${avgLabel}</span>
+                <span class="pp-stat present" title="Present">${stats.present}P</span>
+                <span class="pp-stat late" title="Late">${stats.late}L</span>
+                <span class="pp-stat absent" title="Absent">${stats.absent}A</span>
+              </span>
+            </button>
+            <div class="pp-detail ${isOpen?'show':''}">
+              <p class="pp-tendency">${attendanceTendencyLabel(stats)}</p>
+              ${stats.meetings.length ? stats.meetings.map(mt=>`
+                <div class="pp-meeting-row">
+                  <span class="pp-meeting-date">${mt.date}${mt.locked ? ' <span class="lock-label">Locked</span>' : ''}</span>
+                  <span class="a-summary ${mt.sel.status}">${escapeHtml(statusSummaryText(mt.sel) || '—')}</span>
+                  <span class="pp-meeting-pts">${mt.overall!==null ? `${mt.overall}/${mt.overallMax} · ${Math.round(mt.pct)}%` : 'No points recorded'}</span>
+                </div>
+              `).join('') : '<p class="empty-msg">No meetings recorded yet</p>'}
+            </div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="pp-group">
+          <h3>${escapeHtml(g.name)}</h3>
+          ${g.members.length ? rows : '<p class="empty-msg">No one added yet</p>'}
+        </div>
+      `;
+    }).join('');
+
+    wrap.querySelectorAll('[data-toggle-person]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.togglePerson;
+        expandedPersonId = expandedPersonId === id ? null : id;
+        renderPeopleView();
+      });
+    });
+  }
+
+  // ---------- TESTS VIEW ----------
+  const testDateInput = document.getElementById('testDateInput');
+  testDateInput.valueAsDate = new Date();
+  let expandedTestId = null; // which test's score sheet is currently open
+
+  document.getElementById('createTestBtn').addEventListener('click', ()=>{
+    const nameInput = document.getElementById('testNameInput');
+    const maxInput = document.getElementById('testMaxInput');
+    const name = nameInput.value.trim();
+    const date = testDateInput.value;
+    let maxScore = parseInt(maxInput.value, 10);
+    if(isNaN(maxScore) || maxScore <= 0) maxScore = 100;
+    if(!name){ alert('Give the test a name first.'); return; }
+    if(!date){ alert('Pick a date for the test.'); return; }
+    const test = {id: uid(), name, date, maxScore, scores:{}};
+    data.tests.push(test);
+    data.tests.sort((a,b)=> a.date < b.date ? 1 : -1);
+    saveData();
+    nameInput.value = '';
+    maxInput.value = 100;
+    expandedTestId = test.id;
+    renderTestsView();
+  });
+
+  function renderTestsView(){
+    const wrap = document.getElementById('testsList');
+    if(!data.tests.length){
+      wrap.innerHTML = '<p class="empty-msg">No tests recorded yet — add one above.</p>';
+      return;
+    }
+    wrap.innerHTML = data.tests.map(t=>{
+      const isOpen = expandedTestId === t.id;
+      const enteredScores = Object.values(t.scores).filter(v=>typeof v === 'number');
+      const avgPct = enteredScores.length
+        ? (enteredScores.reduce((s,v)=>s+v,0) / enteredScores.length / t.maxScore * 100)
+        : null;
+
+      const groupBlocks = data.groups.filter(g=>g.members.length).map(g=>`
+        <div class="test-group-block">
+          <h4>${escapeHtml(g.name)}</h4>
+          ${g.members.map(m=>{
+            const score = t.scores[m.id];
+            const scoreVal = typeof score === 'number' ? score : '';
+            const pct = typeof score === 'number' ? (score / t.maxScore * 100) : null;
+            return `
+              <div class="test-score-row">
+                <span class="test-score-name">${escapeHtml(m.name)}</span>
+                <span class="test-score-input-wrap">
+                  <input type="number" min="0" max="${t.maxScore}" class="test-score-input" data-test="${t.id}" data-member="${m.id}" value="${scoreVal}" placeholder="0">
+                  <span class="test-score-max">/ ${t.maxScore}</span>
+                </span>
+                <span class="test-score-pct">${pct!==null ? Math.round(pct)+'%' : '—'}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `).join('');
+
+      return `
+        <div class="test-card">
+          <button class="test-card-header" data-toggle-test="${t.id}">
+            <span class="test-title">${escapeHtml(t.name)} <span class="bd-caret">${isOpen?'▾':'▸'}</span></span>
+            <span class="test-meta">
+              <span class="test-date">${t.date}</span>
+              <span class="test-avg">${avgPct!==null ? `Avg ${Math.round(avgPct)}%` : 'No scores yet'}</span>
+            </span>
+          </button>
+          <div class="test-body ${isOpen?'show':''}">
+            ${groupBlocks || '<p class="empty-msg">No one added yet — add people in the Groups tab.</p>'}
+            <div class="test-actions">
+              <button class="icon-btn danger-text" data-delete-test="${t.id}" title="Delete this test">✕ Delete test</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    wrap.querySelectorAll('[data-toggle-test]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.toggleTest;
+        expandedTestId = expandedTestId === id ? null : id;
+        renderTestsView();
+      });
+    });
+
+    wrap.querySelectorAll('.test-score-input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const test = data.tests.find(t=>t.id===inp.dataset.test);
+        if(!test) return;
+        let val = inp.value === '' ? null : parseFloat(inp.value);
+        if(val !== null){
+          if(isNaN(val)) val = null;
+          else{
+            if(val < 0) val = 0;
+            if(val > test.maxScore) val = test.maxScore;
+          }
+        }
+        if(val === null) delete test.scores[inp.dataset.member];
+        else test.scores[inp.dataset.member] = val;
+        saveData();
+        renderTestsView();
+      });
+    });
+
+    wrap.querySelectorAll('[data-delete-test]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.deleteTest;
+        const test = data.tests.find(t=>t.id===id);
+        if(!test) return;
+        if(!confirm(`Delete "${test.name}" (${test.date}) and all its scores? This can't be undone.`)) return;
+        data.tests = data.tests.filter(t=>t.id!==id);
+        if(expandedTestId === id) expandedTestId = null;
+        saveData();
+        renderTestsView();
+      });
+    });
   }
 
   // ---------- helpers ----------
