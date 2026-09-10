@@ -21,8 +21,6 @@
   <button data-view="attendance">Attendance</button>
   <button data-view="points">Points &amp; Leaderboard</button>
   <button data-view="breakdown">Groups Breakdown</button>
-  <button data-view="people">People</button>
-  <button data-view="tests">Tests</button>
 </nav>
 
 <main>
@@ -88,37 +86,25 @@
     <div id="breakdownGroups"></div>
   </section>
 
-  <!-- PEOPLE VIEW -->
-  <section id="view-people" class="view">
-    <p class="view-intro">Average attendance points, and whether each person tends to be more late or more absent. Tap a name to see every meeting in detail.</p>
-    <div id="peopleList"></div>
-  </section>
-
-  <!-- TESTS VIEW -->
-  <section id="view-tests" class="view">
-    <div class="test-controls">
-      <div>
-        <label for="testNameInput">Test name</label>
-        <input type="text" id="testNameInput" placeholder="e.g. Knots Quiz">
-      </div>
-      <div>
-        <label for="testDateInput">Date</label>
-        <input type="date" id="testDateInput">
-      </div>
-      <div>
-        <label for="testMaxInput">Out of</label>
-        <input type="number" min="1" id="testMaxInput" value="100">
-      </div>
-      <div>
-        <button class="primary-btn" id="createTestBtn">Add test</button>
-      </div>
-    </div>
-    <div id="testsList"></div>
-  </section>
-
 </main>
 
 <footer>Troop Tracker — data is synced live across devices via Firebase.</footer>
+
+<!-- MEMBER FILE — slide-over panel with swipeable info cards -->
+<div id="memberFileOverlay" class="member-file-overlay">
+  <div class="member-file-panel">
+    <div class="member-file-header">
+      <h2 id="mfName"></h2>
+      <button class="icon-btn mf-close" id="mfCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="member-file-slides" id="mfSlides"></div>
+    <div class="member-file-nav">
+      <button class="mf-arrow" id="mfPrevBtn" title="Previous">‹</button>
+      <div class="mf-dots" id="mfDots"></div>
+      <button class="mf-arrow" id="mfNextBtn" title="Next">›</button>
+    </div>
+  </div>
+</div>
 
 <!-- Firebase (compat SDKs — simplest to use with plain script tags) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>

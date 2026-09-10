@@ -10,8 +10,7 @@
         {id:'g3', name:'Group 3', members:[]},
         {id:'g4', name:'Group 4', members:[]}
       ],
-      attendance: [], // {date, records: {memberId: 'present'|'late'|'absent'}}
-      tests: [] // {id, name, date, maxScore, scores: {memberId: number}}
+      attendance: [] // {date, records: {memberId: 'present'|'late'|'absent'}}
     };
   }
 
@@ -112,7 +111,6 @@
         if(parsed && Array.isArray(parsed.groups) && parsed.groups.length){
           data = migrateData(parsed);
           if(!Array.isArray(data.attendance)) data.attendance = [];
-          if(!Array.isArray(data.tests)) data.tests = [];
         } else if(!firstLoadHandled){
           // Nothing in the database yet — seed it with the defaults.
           data = defaultData();
@@ -140,8 +138,6 @@
     if(activeView === 'attendance') renderAttendanceView();
     if(activeView === 'points') renderPointsView();
     if(activeView === 'breakdown') renderBreakdownView();
-    if(activeView === 'people') renderPeopleView();
-    if(activeView === 'tests') renderTestsView();
   }
 
   // ---------- NAV ----------
@@ -155,8 +151,6 @@
       if(btn.dataset.view === 'attendance') renderAttendanceView();
       if(btn.dataset.view === 'points') renderPointsView();
       if(btn.dataset.view === 'breakdown') renderBreakdownView();
-      if(btn.dataset.view === 'people') renderPeopleView();
-      if(btn.dataset.view === 'tests') renderTestsView();
     });
   });
 
@@ -184,6 +178,7 @@
                 </span>
                 <span class="member-actions">
                   <span class="member-points">${memberTotals(m).net}</span>
+                  <button class="icon-btn file-btn" data-member-file="${m.id}" title="Open ${escapeAttr(m.name)}'s file">📇</button>
                   <button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>
                   <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
                 </span>
@@ -205,6 +200,11 @@
         const g = data.groups.find(g=>g.id===inp.dataset.group);
         if(g){ g.name = inp.value.trim() || g.name; saveData(); renderGroups(); }
       });
+    });
+
+    // wire up member file buttons
+    grid.querySelectorAll('[data-member-file]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openMemberFile(btn.dataset.memberFile));
     });
 
     // wire up member role edits
@@ -847,218 +847,176 @@
     return null;
   }
 
-  // ---------- PEOPLE VIEW (attendance stats per person) ----------
-  let expandedPersonId = null; // which member's meeting-by-meeting detail is open
+  // ---------- MEMBER FILE (slide-over panel with swipeable info cards) ----------
+  let mfCurrentSlide = 0;
 
-  // Pulls every meeting a member has a record for and boils it down into
-  // present/late/absent counts plus an average uniform+tools percentage.
-  // Percentage (not raw points) is averaged because maxPoints can change
-  // meeting to meeting, so a raw average wouldn't be comparable.
-  function computeAttendanceStats(memberId){
-    let present = 0, late = 0, absent = 0;
-    let pctSum = 0, pctCount = 0;
-    const meetings = [];
-    data.attendance.forEach(entry=>{
-      const raw = entry.records[memberId];
-      if(!raw) return;
-      const sel = normalizeRecord(raw);
-      if(sel.status === 'present') present++;
-      else if(sel.status === 'late') late++;
-      else if(sel.status === 'absent') absent++;
-
-      const maxPoints = typeof entry.maxPoints === 'number' ? entry.maxPoints : 10;
-      const uniformVal = typeof sel.uniform === 'number' ? sel.uniform : null;
-      const toolsVal = typeof sel.tools === 'number' ? sel.tools : null;
-      let overall = null, overallMax = maxPoints * 2, pct = null;
-      if(uniformVal !== null || toolsVal !== null){
-        overall = (uniformVal||0) + (toolsVal||0);
-        pct = overallMax > 0 ? (overall / overallMax * 100) : 0;
-        pctSum += pct; pctCount++;
-      }
-      meetings.push({date: entry.date, sel, uniformVal, toolsVal, overall, overallMax, pct, locked: !!entry.locked});
-    });
-    meetings.sort((a,b)=> a.date < b.date ? 1 : -1);
-    return {
-      present, late, absent,
-      totalRecorded: present + late + absent,
-      avgPercent: pctCount ? (pctSum / pctCount) : null,
-      meetings
-    };
+  function findGroupOfMember(memberId){
+    return data.groups.find(g=>g.members.some(m=>m.id===memberId)) || null;
   }
 
-  function attendanceTendencyLabel(stats){
-    if(stats.totalRecorded === 0) return 'No meetings recorded yet';
-    if(stats.late === 0 && stats.absent === 0) return 'Always present';
-    if(stats.late > stats.absent) return 'More often late than absent';
-    if(stats.absent > stats.late) return 'More often absent than late';
-    return 'Equally late and absent';
+  // Every past meeting that has a record for this member, most recent first.
+  function attendanceRowsForMember(memberId){
+    return data.attendance
+      .filter(a=>a.records && a.records[memberId])
+      .map(a=>({
+        date: a.date,
+        record: a.records[memberId],
+        maxPoints: typeof a.maxPoints==='number' ? a.maxPoints : 10
+      }))
+      .sort((a,b)=> a.date < b.date ? 1 : -1);
   }
 
-  function renderPeopleView(){
-    const wrap = document.getElementById('peopleList');
-    wrap.innerHTML = data.groups.map(g=>{
-      const rows = g.members.map(m=>{
-        const stats = computeAttendanceStats(m.id);
-        const isOpen = expandedPersonId === m.id;
-        const avgLabel = stats.avgPercent !== null ? `${Math.round(stats.avgPercent)}% avg` : 'No points yet';
-        return `
-          <div class="pp-member">
-            <button class="pp-member-row" data-toggle-person="${m.id}">
-              <span class="pp-name">${escapeHtml(m.name)} <span class="pp-caret">${isOpen?'▾':'▸'}</span></span>
-              <span class="pp-stats">
-                <span class="pp-stat avg">${avgLabel}</span>
-                <span class="pp-stat present" title="Present">${stats.present}P</span>
-                <span class="pp-stat late" title="Late">${stats.late}L</span>
-                <span class="pp-stat absent" title="Absent">${stats.absent}A</span>
-              </span>
-            </button>
-            <div class="pp-detail ${isOpen?'show':''}">
-              <p class="pp-tendency">${attendanceTendencyLabel(stats)}</p>
-              ${stats.meetings.length ? stats.meetings.map(mt=>`
-                <div class="pp-meeting-row">
-                  <span class="pp-meeting-date">${mt.date}${mt.locked ? ' <span class="lock-label">Locked</span>' : ''}</span>
-                  <span class="a-summary ${mt.sel.status}">${escapeHtml(statusSummaryText(mt.sel) || '—')}</span>
-                  <span class="pp-meeting-pts">${mt.overall!==null ? `${mt.overall}/${mt.overallMax} · ${Math.round(mt.pct)}%` : 'No points recorded'}</span>
-                </div>
-              `).join('') : '<p class="empty-msg">No meetings recorded yet</p>'}
-            </div>
-          </div>
-        `;
-      }).join('');
-      return `
-        <div class="pp-group">
-          <h3>${escapeHtml(g.name)}</h3>
-          ${g.members.length ? rows : '<p class="empty-msg">No one added yet</p>'}
+  function attendanceDetailText(sel){
+    if(sel.status === 'absent'){
+      if(sel.excused === true) return 'Excused';
+      if(sel.excused === false) return 'Unexcused';
+      return '';
+    }
+    if(sel.status === 'late' && sel.lateValue){
+      const unit = sel.lateUnit === 'hours' ? 'hr' : 'min';
+      return `${sel.lateValue}${unit}`;
+    }
+    return '';
+  }
+
+  function statusLabel(status){
+    if(!status) return '—';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+
+  function initialsFor(name){
+    return name.trim().split(/\s+/).slice(0,2).map(w=>w[0] ? w[0].toUpperCase() : '').join('');
+  }
+
+  function openMemberFile(memberId){
+    const member = findMemberById(memberId);
+    if(!member) return;
+    const group = findGroupOfMember(memberId);
+    const t = memberTotals(member);
+    const attendanceRows = attendanceRowsForMember(memberId);
+    const presentCount = attendanceRows.filter(r=>normalizeRecord(r.record).status==='present').length;
+    const lateCount = attendanceRows.filter(r=>normalizeRecord(r.record).status==='late').length;
+    const absentCount = attendanceRows.filter(r=>normalizeRecord(r.record).status==='absent').length;
+    const log = [...(member.pointLog||[])].sort((a,b)=> a.date < b.date ? 1 : -1);
+
+    document.getElementById('mfName').textContent = member.name;
+
+    const slidesEl = document.getElementById('mfSlides');
+    slidesEl.innerHTML = `
+      <div class="mf-slide">
+        <h3 class="mf-slide-title">Overview</h3>
+        <div class="mf-initials-circle">${escapeHtml(initialsFor(member.name))}</div>
+        ${member.role ? `<div class="mf-role-tag">${escapeHtml(member.role)}</div>` : ''}
+        <div class="mf-stat-grid">
+          <div class="mf-stat-card"><span class="mf-stat-label">Group</span><span class="mf-stat-value">${group ? escapeHtml(group.name) : '—'}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Net points</span><span class="mf-stat-value">${t.net}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Gained</span><span class="mf-stat-value gained">+${t.gained}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Lost</span><span class="mf-stat-value lost">-${t.lost}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Present</span><span class="mf-stat-value present">${presentCount}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Late</span><span class="mf-stat-value late">${lateCount}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Absent</span><span class="mf-stat-value absent">${absentCount}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Meetings logged</span><span class="mf-stat-value">${attendanceRows.length}</span></div>
         </div>
-      `;
-    }).join('');
+      </div>
+      <div class="mf-slide">
+        <h3 class="mf-slide-title">Point History</h3>
+        ${log.length ? `<div class="mf-list">${log.map(e=>`
+          <div class="mf-list-row">
+            <span class="mf-list-date">${e.date}</span>
+            <span class="mf-list-reason">${escapeHtml(e.reason||'')}</span>
+            <span class="mf-list-amount ${e.amount>0?'gained':'lost'}">${e.amount>0?'+':''}${e.amount}</span>
+          </div>
+        `).join('')}</div>` : '<p class="empty-msg">No point history yet</p>'}
+      </div>
+      <div class="mf-slide">
+        <h3 class="mf-slide-title">Attendance History</h3>
+        ${attendanceRows.length ? `<div class="mf-list">${attendanceRows.map(r=>{
+          const sel = normalizeRecord(r.record);
+          const detail = attendanceDetailText(sel);
+          const [uniformLabel, toolsLabel, overallLabel] = formatUniformToolsLabels(r.record, r.maxPoints);
+          return `
+          <div class="mf-list-row mf-list-row-wrap">
+            <span class="mf-list-date">${r.date}</span>
+            <span class="mf-list-reason">
+              <span class="mf-att-tag ${sel.status}">${escapeHtml(statusLabel(sel.status))}${detail ? ' · ' + escapeHtml(detail) : ''}</span>
+              <span class="mf-ut-inline">${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)} · ${escapeHtml(overallLabel)}</span>
+            </span>
+          </div>`;
+        }).join('')}</div>` : '<p class="empty-msg">No attendance recorded yet</p>'}
+      </div>
+    `;
 
-    wrap.querySelectorAll('[data-toggle-person]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.dataset.togglePerson;
-        expandedPersonId = expandedPersonId === id ? null : id;
-        renderPeopleView();
-      });
-    });
+    const dotsEl = document.getElementById('mfDots');
+    dotsEl.innerHTML = Array.from({length: slidesEl.children.length}).map((_,i)=>
+      `<button class="mf-dot ${i===0?'active':''}" data-slide="${i}"></button>`
+    ).join('');
+
+    mfCurrentSlide = 0;
+    slidesEl.scrollLeft = 0;
+    updateMfArrows();
+
+    document.getElementById('memberFileOverlay').classList.add('show');
   }
 
-  // ---------- TESTS VIEW ----------
-  const testDateInput = document.getElementById('testDateInput');
-  testDateInput.valueAsDate = new Date();
-  let expandedTestId = null; // which test's score sheet is currently open
+  function closeMemberFile(){
+    document.getElementById('memberFileOverlay').classList.remove('show');
+  }
 
-  document.getElementById('createTestBtn').addEventListener('click', ()=>{
-    const nameInput = document.getElementById('testNameInput');
-    const maxInput = document.getElementById('testMaxInput');
-    const name = nameInput.value.trim();
-    const date = testDateInput.value;
-    let maxScore = parseInt(maxInput.value, 10);
-    if(isNaN(maxScore) || maxScore <= 0) maxScore = 100;
-    if(!name){ alert('Give the test a name first.'); return; }
-    if(!date){ alert('Pick a date for the test.'); return; }
-    const test = {id: uid(), name, date, maxScore, scores:{}};
-    data.tests.push(test);
-    data.tests.sort((a,b)=> a.date < b.date ? 1 : -1);
-    saveData();
-    nameInput.value = '';
-    maxInput.value = 100;
-    expandedTestId = test.id;
-    renderTestsView();
+  function goToMfSlide(index){
+    const slidesEl = document.getElementById('mfSlides');
+    const slideCount = slidesEl.children.length;
+    if(index < 0) index = 0;
+    if(index > slideCount-1) index = slideCount-1;
+    mfCurrentSlide = index;
+    slidesEl.scrollTo({ left: index * slidesEl.clientWidth, behavior: 'smooth' });
+    updateMfDots();
+    updateMfArrows();
+  }
+
+  function updateMfDots(){
+    document.querySelectorAll('.mf-dot').forEach((d,i)=>d.classList.toggle('active', i===mfCurrentSlide));
+  }
+
+  function updateMfArrows(){
+    const slidesEl = document.getElementById('mfSlides');
+    const slideCount = slidesEl.children.length;
+    document.getElementById('mfPrevBtn').disabled = mfCurrentSlide <= 0;
+    document.getElementById('mfNextBtn').disabled = mfCurrentSlide >= slideCount-1;
+  }
+
+  document.getElementById('mfCloseBtn').addEventListener('click', closeMemberFile);
+  document.getElementById('memberFileOverlay').addEventListener('click', (e)=>{
+    if(e.target.id === 'memberFileOverlay') closeMemberFile();
+  });
+  document.getElementById('mfPrevBtn').addEventListener('click', ()=>goToMfSlide(mfCurrentSlide-1));
+  document.getElementById('mfNextBtn').addEventListener('click', ()=>goToMfSlide(mfCurrentSlide+1));
+  document.getElementById('mfDots').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.mf-dot');
+    if(!btn) return;
+    goToMfSlide(parseInt(btn.dataset.slide, 10));
   });
 
-  function renderTestsView(){
-    const wrap = document.getElementById('testsList');
-    if(!data.tests.length){
-      wrap.innerHTML = '<p class="empty-msg">No tests recorded yet — add one above.</p>';
-      return;
-    }
-    wrap.innerHTML = data.tests.map(t=>{
-      const isOpen = expandedTestId === t.id;
-      const enteredScores = Object.values(t.scores).filter(v=>typeof v === 'number');
-      const avgPct = enteredScores.length
-        ? (enteredScores.reduce((s,v)=>s+v,0) / enteredScores.length / t.maxScore * 100)
-        : null;
+  // Keep the dots/arrows in sync when someone swipes/scrolls the slides
+  // directly instead of using the arrow buttons.
+  let mfScrollTimeout = null;
+  document.getElementById('mfSlides').addEventListener('scroll', ()=>{
+    const slidesEl = document.getElementById('mfSlides');
+    clearTimeout(mfScrollTimeout);
+    mfScrollTimeout = setTimeout(()=>{
+      const width = slidesEl.clientWidth || 1;
+      mfCurrentSlide = Math.round(slidesEl.scrollLeft / width);
+      updateMfDots();
+      updateMfArrows();
+    }, 80);
+  });
 
-      const groupBlocks = data.groups.filter(g=>g.members.length).map(g=>`
-        <div class="test-group-block">
-          <h4>${escapeHtml(g.name)}</h4>
-          ${g.members.map(m=>{
-            const score = t.scores[m.id];
-            const scoreVal = typeof score === 'number' ? score : '';
-            const pct = typeof score === 'number' ? (score / t.maxScore * 100) : null;
-            return `
-              <div class="test-score-row">
-                <span class="test-score-name">${escapeHtml(m.name)}</span>
-                <span class="test-score-input-wrap">
-                  <input type="number" min="0" max="${t.maxScore}" class="test-score-input" data-test="${t.id}" data-member="${m.id}" value="${scoreVal}" placeholder="0">
-                  <span class="test-score-max">/ ${t.maxScore}</span>
-                </span>
-                <span class="test-score-pct">${pct!==null ? Math.round(pct)+'%' : '—'}</span>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `).join('');
-
-      return `
-        <div class="test-card">
-          <button class="test-card-header" data-toggle-test="${t.id}">
-            <span class="test-title">${escapeHtml(t.name)} <span class="bd-caret">${isOpen?'▾':'▸'}</span></span>
-            <span class="test-meta">
-              <span class="test-date">${t.date}</span>
-              <span class="test-avg">${avgPct!==null ? `Avg ${Math.round(avgPct)}%` : 'No scores yet'}</span>
-            </span>
-          </button>
-          <div class="test-body ${isOpen?'show':''}">
-            ${groupBlocks || '<p class="empty-msg">No one added yet — add people in the Groups tab.</p>'}
-            <div class="test-actions">
-              <button class="icon-btn danger-text" data-delete-test="${t.id}" title="Delete this test">✕ Delete test</button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    wrap.querySelectorAll('[data-toggle-test]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.dataset.toggleTest;
-        expandedTestId = expandedTestId === id ? null : id;
-        renderTestsView();
-      });
-    });
-
-    wrap.querySelectorAll('.test-score-input').forEach(inp=>{
-      inp.addEventListener('change', ()=>{
-        const test = data.tests.find(t=>t.id===inp.dataset.test);
-        if(!test) return;
-        let val = inp.value === '' ? null : parseFloat(inp.value);
-        if(val !== null){
-          if(isNaN(val)) val = null;
-          else{
-            if(val < 0) val = 0;
-            if(val > test.maxScore) val = test.maxScore;
-          }
-        }
-        if(val === null) delete test.scores[inp.dataset.member];
-        else test.scores[inp.dataset.member] = val;
-        saveData();
-        renderTestsView();
-      });
-    });
-
-    wrap.querySelectorAll('[data-delete-test]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.dataset.deleteTest;
-        const test = data.tests.find(t=>t.id===id);
-        if(!test) return;
-        if(!confirm(`Delete "${test.name}" (${test.date}) and all its scores? This can't be undone.`)) return;
-        data.tests = data.tests.filter(t=>t.id!==id);
-        if(expandedTestId === id) expandedTestId = null;
-        saveData();
-        renderTestsView();
-      });
-    });
-  }
+  document.addEventListener('keydown', (e)=>{
+    const overlay = document.getElementById('memberFileOverlay');
+    if(!overlay.classList.contains('show')) return;
+    if(e.key === 'Escape') closeMemberFile();
+    if(e.key === 'ArrowRight') goToMfSlide(mfCurrentSlide+1);
+    if(e.key === 'ArrowLeft') goToMfSlide(mfCurrentSlide-1);
+  });
 
   // ---------- helpers ----------
   // Longer role text gets progressively smaller so it never crowds out
