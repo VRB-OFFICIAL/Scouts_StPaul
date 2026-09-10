@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Troop Tracker — Groups, Attendance & Points</title>
-<link rel="stylesheet" href="styles.css?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 
@@ -21,6 +21,7 @@
   <button data-view="attendance">Attendance</button>
   <button data-view="points">Points &amp; Leaderboard</button>
   <button data-view="breakdown">Groups Breakdown</button>
+  <button data-view="tests">Tests</button>
 </nav>
 
 <main>
@@ -86,6 +87,28 @@
     <div id="breakdownGroups"></div>
   </section>
 
+  <!-- TESTS VIEW -->
+  <section id="view-tests" class="view">
+    <div class="test-form">
+      <div>
+        <label for="testName">Test name</label>
+        <input type="text" id="testName" placeholder="e.g. Knot Tying Test">
+      </div>
+      <div>
+        <label for="testDate">Date</label>
+        <input type="date" id="testDate">
+      </div>
+      <div>
+        <label for="testMaxScore">Max score</label>
+        <input type="number" min="0" id="testMaxScore" value="10">
+      </div>
+      <div>
+        <button class="primary-btn" id="addTestBtn">Add test</button>
+      </div>
+    </div>
+    <div id="testsList"></div>
+  </section>
+
 </main>
 
 <footer>Troop Tracker — data is synced live across devices via Firebase.</footer>
@@ -111,7 +134,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="script.js?v=12"></script>
+<script src="script.js?v=13"></script>
 
 </body>
 </html>

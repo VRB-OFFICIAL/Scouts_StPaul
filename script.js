@@ -10,7 +10,8 @@
         {id:'g3', name:'Group 3', members:[]},
         {id:'g4', name:'Group 4', members:[]}
       ],
-      attendance: [] // {date, records: {memberId: 'present'|'late'|'absent'}}
+      attendance: [], // {date, records: {memberId: 'present'|'late'|'absent'}}
+      tests: [] // {id, name, date, maxScore, records: {memberId: {score, result:'pass'|'fail'|''}}}
     };
   }
 
@@ -55,6 +56,11 @@
         }
         delete m.points;
       });
+    });
+    if(!Array.isArray(d.tests)) d.tests = [];
+    d.tests.forEach(t=>{
+      if(!t.records || typeof t.records !== 'object') t.records = {};
+      if(typeof t.maxScore !== 'number') t.maxScore = 10;
     });
     return d;
   }
@@ -111,6 +117,7 @@
         if(parsed && Array.isArray(parsed.groups) && parsed.groups.length){
           data = migrateData(parsed);
           if(!Array.isArray(data.attendance)) data.attendance = [];
+          if(!Array.isArray(data.tests)) data.tests = [];
         } else if(!firstLoadHandled){
           // Nothing in the database yet — seed it with the defaults.
           data = defaultData();
@@ -138,6 +145,7 @@
     if(activeView === 'attendance') renderAttendanceView();
     if(activeView === 'points') renderPointsView();
     if(activeView === 'breakdown') renderBreakdownView();
+    if(activeView === 'tests') renderTestsView();
   }
 
   // ---------- NAV ----------
@@ -151,6 +159,7 @@
       if(btn.dataset.view === 'attendance') renderAttendanceView();
       if(btn.dataset.view === 'points') renderPointsView();
       if(btn.dataset.view === 'breakdown') renderBreakdownView();
+      if(btn.dataset.view === 'tests') renderTestsView();
     });
   });
 
@@ -839,6 +848,124 @@
     });
   }
 
+  // ---------- TESTS VIEW ----------
+  const testNameInput = document.getElementById('testName');
+  const testDateInput = document.getElementById('testDate');
+  const testMaxScoreInput = document.getElementById('testMaxScore');
+  testDateInput.valueAsDate = new Date();
+
+  document.getElementById('addTestBtn').addEventListener('click', ()=>{
+    const name = testNameInput.value.trim();
+    if(!name) return;
+    const date = testDateInput.value || new Date().toISOString().slice(0,10);
+    let maxScore = parseInt(testMaxScoreInput.value, 10);
+    if(isNaN(maxScore) || maxScore < 0) maxScore = 10;
+    data.tests.push({ id: uid(), name, date, maxScore, records: {} });
+    data.tests.sort((a,b)=> a.date < b.date ? 1 : -1);
+    saveData();
+    testNameInput.value = '';
+    testDateInput.valueAsDate = new Date();
+    testMaxScoreInput.value = 10;
+    renderTestsView();
+  });
+
+  function testRecord(test, memberId){
+    return test.records[memberId] || { score: null, result: '' };
+  }
+
+  function renderTestsView(){
+    const wrap = document.getElementById('testsList');
+    if(!data.tests.length){
+      wrap.innerHTML = '<p class="empty-msg">No tests added yet.</p>';
+      return;
+    }
+    wrap.innerHTML = data.tests.map(test=>{
+      const groupBlocks = data.groups.map(g=>{
+        if(!g.members.length) return '';
+        const rows = g.members.map(m=>{
+          const rec = testRecord(test, m.id);
+          const scoreVal = (rec.score===null || rec.score===undefined) ? '' : rec.score;
+          return `
+            <div class="test-row">
+              <button class="test-name-btn" data-test-open-member="${m.id}" title="Open ${escapeAttr(m.name)}'s file">${escapeHtml(m.name)}</button>
+              <div class="test-row-controls">
+                <input type="number" min="0" max="${test.maxScore}" class="test-score-input" data-test="${test.id}" data-member="${m.id}" value="${escapeAttr(scoreVal)}" placeholder="0">
+                <span class="test-score-max">/ ${test.maxScore}</span>
+                <div class="pf-btns">
+                  <button class="pf-btn pass ${rec.result==='pass'?'selected':''}" data-test="${test.id}" data-member="${m.id}" data-result="pass">Pass</button>
+                  <button class="pf-btn fail ${rec.result==='fail'?'selected':''}" data-test="${test.id}" data-member="${m.id}" data-result="fail">Fail</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        return `<div class="test-group-block"><h4>${escapeHtml(g.name)}</h4>${rows}</div>`;
+      }).join('');
+
+      return `
+        <div class="test-card">
+          <div class="test-card-header">
+            <h3>${escapeHtml(test.name)}<span class="test-meta">${test.date}</span></h3>
+            <div class="test-card-actions">
+              <button class="test-delete-btn" data-delete-test="${test.id}" title="Delete this test">✕</button>
+            </div>
+          </div>
+          ${groupBlocks || '<p class="empty-msg">No one in any group yet.</p>'}
+        </div>
+      `;
+    }).join('');
+
+    wrap.querySelectorAll('[data-test-open-member]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openMemberFile(btn.dataset.testOpenMember));
+    });
+
+    wrap.querySelectorAll('.test-score-input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const test = data.tests.find(t=>t.id===inp.dataset.test);
+        if(!test) return;
+        const memberId = inp.dataset.member;
+        const rec = testRecord(test, memberId);
+        let val = inp.value === '' ? null : parseInt(inp.value, 10);
+        if(val !== null){
+          if(isNaN(val)) val = null;
+          else {
+            if(val < 0) val = 0;
+            if(val > test.maxScore) val = test.maxScore;
+          }
+        }
+        test.records[memberId] = { ...rec, score: val };
+        inp.value = val === null ? '' : val;
+        saveData();
+      });
+    });
+
+    wrap.querySelectorAll('.pf-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const test = data.tests.find(t=>t.id===btn.dataset.test);
+        if(!test) return;
+        const memberId = btn.dataset.member;
+        const rec = testRecord(test, memberId);
+        const newResult = btn.dataset.result;
+        rec.result = rec.result === newResult ? '' : newResult;
+        test.records[memberId] = rec;
+        saveData();
+        renderTestsView();
+      });
+    });
+
+    wrap.querySelectorAll('[data-delete-test]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const testId = btn.dataset.deleteTest;
+        const test = data.tests.find(t=>t.id===testId);
+        if(!test) return;
+        if(!confirm(`Delete "${test.name}"? This can't be undone.`)) return;
+        data.tests = data.tests.filter(t=>t.id!==testId);
+        saveData();
+        renderTestsView();
+      });
+    });
+  }
+
   function findMemberById(memberId){
     for(const g of data.groups){
       const m = g.members.find(m=>m.id===memberId);
@@ -862,6 +989,22 @@
         date: a.date,
         record: a.records[memberId],
         maxPoints: typeof a.maxPoints==='number' ? a.maxPoints : 10
+      }))
+      .sort((a,b)=> a.date < b.date ? 1 : -1);
+  }
+
+  // Every test where this member has been marked pass or fail — an empty
+  // score/result means they haven't been graded on that test yet, so it's
+  // not counted as "participated" and left out of their file.
+  function testRowsForMember(memberId){
+    return data.tests
+      .filter(t=>t.records && t.records[memberId] && t.records[memberId].result)
+      .map(t=>({
+        name: t.name,
+        date: t.date,
+        score: t.records[memberId].score,
+        maxScore: t.maxScore,
+        result: t.records[memberId].result
       }))
       .sort((a,b)=> a.date < b.date ? 1 : -1);
   }
@@ -898,6 +1041,9 @@
     const lateCount = attendanceRows.filter(r=>normalizeRecord(r.record).status==='late').length;
     const absentCount = attendanceRows.filter(r=>normalizeRecord(r.record).status==='absent').length;
     const log = [...(member.pointLog||[])].sort((a,b)=> a.date < b.date ? 1 : -1);
+    const testRows = testRowsForMember(memberId);
+    const passCount = testRows.filter(r=>r.result==='pass').length;
+    const failCount = testRows.filter(r=>r.result==='fail').length;
 
     document.getElementById('mfName').textContent = member.name;
 
@@ -916,6 +1062,8 @@
           <div class="mf-stat-card"><span class="mf-stat-label">Late</span><span class="mf-stat-value late">${lateCount}</span></div>
           <div class="mf-stat-card"><span class="mf-stat-label">Absent</span><span class="mf-stat-value absent">${absentCount}</span></div>
           <div class="mf-stat-card"><span class="mf-stat-label">Meetings logged</span><span class="mf-stat-value">${attendanceRows.length}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Tests passed</span><span class="mf-stat-value present">${passCount}</span></div>
+          <div class="mf-stat-card"><span class="mf-stat-label">Tests failed</span><span class="mf-stat-value absent">${failCount}</span></div>
         </div>
       </div>
       <div class="mf-slide">
@@ -943,6 +1091,19 @@
             </span>
           </div>`;
         }).join('')}</div>` : '<p class="empty-msg">No attendance recorded yet</p>'}
+      </div>
+      <div class="mf-slide">
+        <h3 class="mf-slide-title">Tests</h3>
+        ${testRows.length ? `<div class="mf-list">${testRows.map(r=>`
+          <div class="mf-list-row">
+            <span class="mf-list-date">${r.date}</span>
+            <span class="mf-list-reason">
+              ${escapeHtml(r.name)}
+              ${(r.score!==null && r.score!==undefined) ? ` · ${r.score}/${r.maxScore}` : ''}
+            </span>
+            <span class="mf-test-tag ${r.result}">${r.result==='pass' ? 'Pass' : 'Fail'}</span>
+          </div>
+        `).join('')}</div>` : '<p class="empty-msg">No tests recorded yet</p>'}
       </div>
     `;
 
