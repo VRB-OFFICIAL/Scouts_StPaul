@@ -1011,6 +1011,35 @@
     margin:12px 0 0;
   }
   .login-error.show{display:block;}
+  .login-divider{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:16px 0;
+    color:var(--gold-100);
+    opacity:0.5;
+    font-size:0.78rem;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .login-divider::before, .login-divider::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--navy-700);
+  }
+  .visitor-btn{
+    width:100%;
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    padding:10px 12px;
+    border-radius:6px;
+    font-size:0.95rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .visitor-btn:hover{border-color:var(--gold-500); color:var(--gold-300);}
   .login-hint{
     margin:18px 0 0;
     font-size:0.78rem;

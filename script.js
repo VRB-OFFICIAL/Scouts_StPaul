@@ -3,20 +3,19 @@
   const DOC_ID = 'data';
 
   // ---------- LOGIN / ROLE ----------
-  // Two access codes gate the app: entering the editor code unlocks full
-  // editing, entering the viewer code unlocks read-only viewing (people can
-  // still browse groups, attendance, points, tests and open member files —
-  // they just can't change anything, including roles). Change these two
-  // codes to whatever you like before sharing the app with your troop.
+  // One access code gates editing: entering the editor code unlocks full
+  // editing. Anyone can click "Continue as Visitor" for read-only viewing
+  // (people can still browse groups, attendance, points, tests and open
+  // member files — they just can't change anything, including roles).
+  // Change the code below to whatever you like before sharing the app.
   //
   // NOTE ON SECURITY: this check happens in the browser, so it keeps
   // honest people honest and stops casual/accidental edits — it is not a
   // substitute for real server-side authentication. Anyone who really
-  // wanted to could read this file and find the codes, or connect to
+  // wanted to could read this file and find the code, or connect to
   // Firestore directly. For a troop tracker that's normally an acceptable
   // trade-off, but don't use this pattern for anything sensitive.
   const EDITOR_CODE = 'troop-editor';
-  const VIEWER_CODE = 'troop-viewer';
   const ROLE_KEY = 'troopTrackerRole';
 
   let currentRole = null; // 'editor' | 'viewer' | null (not logged in yet)
@@ -103,6 +102,7 @@
   const loginForm = document.getElementById('loginForm');
   const loginCodeInput = document.getElementById('loginCode');
   const loginError = document.getElementById('loginError');
+  const visitorBtn = document.getElementById('visitorBtn');
   const roleBadge = document.getElementById('roleBadge');
   const logoutBtn = document.getElementById('logoutBtn');
   let appStarted = false; // guards against calling initFirebase() more than once
@@ -112,7 +112,7 @@
     document.body.classList.remove('not-authed');
     document.body.classList.toggle('viewer-mode', role === 'viewer');
     loginScreen.classList.remove('show');
-    roleBadge.textContent = role === 'editor' ? 'Editor' : 'Viewer';
+    roleBadge.textContent = role === 'editor' ? 'Editor' : 'Visitor';
     roleBadge.className = 'role-badge ' + role;
     renderAll();
     if(!appStarted){
@@ -124,19 +124,22 @@
   loginForm.addEventListener('submit', (e)=>{
     e.preventDefault();
     const code = loginCodeInput.value.trim();
-    let role = null;
-    if(code && code === EDITOR_CODE) role = 'editor';
-    else if(code && code === VIEWER_CODE) role = 'viewer';
-    if(!role){
+    if(!code || code !== EDITOR_CODE){
       loginError.textContent = 'That code is not recognized — try again.';
       loginError.classList.add('show');
       loginCodeInput.select();
       return;
     }
     loginError.classList.remove('show');
-    localStorage.setItem(ROLE_KEY, role);
+    localStorage.setItem(ROLE_KEY, 'editor');
     loginCodeInput.value = '';
-    startApp(role);
+    startApp('editor');
+  });
+
+  visitorBtn.addEventListener('click', ()=>{
+    loginError.classList.remove('show');
+    localStorage.setItem(ROLE_KEY, 'viewer');
+    startApp('viewer');
   });
 
   logoutBtn.addEventListener('click', ()=>{

@@ -4,21 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Troop Tracker — Groups, Attendance & Points</title>
-<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body class="not-authed">
 
-<!-- LOGIN SCREEN — must enter an editor or viewer code to see the app -->
+<!-- LOGIN SCREEN — editors need a code; visitors can just click through -->
 <div id="loginScreen" class="login-overlay show">
   <div class="login-card">
     <h2>⚜ Troop Tracker</h2>
-    <p class="login-sub">Enter your access code to continue.</p>
+    <p class="login-sub">Enter the editor code, or continue as a visitor.</p>
     <form id="loginForm">
-      <input type="password" id="loginCode" placeholder="Access code" autocomplete="off" autofocus>
+      <input type="password" id="loginCode" placeholder="Editor code" autocomplete="off" autofocus>
       <button type="submit" class="primary-btn">Log in</button>
     </form>
+    <div class="login-divider"><span>or</span></div>
+    <button type="button" id="visitorBtn" class="visitor-btn">Continue as Visitor</button>
     <p id="loginError" class="login-error"></p>
-    <p class="login-hint">Editors can add and change data. Viewers can look at everything — groups, attendance, points, tests and people's files — but can't make changes.</p>
+    <p class="login-hint">Editors can add and change data. Visitors can look at everything — groups, attendance, points, tests and people's files — but can't make changes.</p>
   </div>
 </div>
 
@@ -152,7 +154,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="script.js?v=13"></script>
+<script src="script.js?v=14"></script>
 
 </body>
 </html>
