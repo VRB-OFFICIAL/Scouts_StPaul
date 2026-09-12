@@ -965,3 +965,101 @@
   @media (max-width:600px){
     .member-file-panel{max-width:100%;}
   }
+
+  /* Login screen */
+  body.not-authed{overflow:hidden;}
+  .login-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:100;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    background:
+      radial-gradient(ellipse at top left, var(--navy-800) 0%, var(--navy-950) 55%),
+      var(--navy-950);
+  }
+  .login-overlay.show{display:flex;}
+  .login-card{
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    padding:32px 30px;
+    max-width:360px;
+    width:100%;
+    text-align:center;
+  }
+  .login-card h2{margin:0 0 6px; font-size:1.6rem; color:var(--gold-300); font-family:'Georgia','Times New Roman',serif;}
+  .login-sub{margin:0 0 20px; opacity:0.8; font-size:0.9rem;}
+  #loginForm{display:flex; flex-direction:column; gap:10px;}
+  #loginForm input{
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    padding:10px 12px;
+    border-radius:6px;
+    font-size:1rem;
+    text-align:center;
+    letter-spacing:0.5px;
+  }
+  .login-error{
+    display:none;
+    color:var(--absent);
+    font-size:0.85rem;
+    margin:12px 0 0;
+  }
+  .login-error.show{display:block;}
+  .login-hint{
+    margin:18px 0 0;
+    font-size:0.78rem;
+    opacity:0.65;
+    line-height:1.5;
+  }
+
+  /* Role badge & logout, in the header */
+  .header-account{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:10px;
+  }
+  .role-badge{
+    padding:3px 12px;
+    border-radius:20px;
+    font-size:0.75rem;
+    font-weight:700;
+    letter-spacing:0.4px;
+    text-transform:uppercase;
+    border:1px solid var(--gold-500);
+    color:var(--gold-300);
+  }
+  .role-badge.viewer{border-color:var(--navy-600); color:var(--gold-100); opacity:0.85;}
+  .logout-btn{
+    background:none;
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    opacity:0.75;
+    padding:3px 12px;
+    border-radius:20px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  .logout-btn:hover{opacity:1; border-color:var(--gold-500);}
+
+  /* Viewer mode — hide the remaining static "add new" controls that aren't
+     already left out of the generated markup for non-editors. */
+  body.viewer-mode .points-form,
+  body.viewer-mode .test-form,
+  body.viewer-mode #attendanceMaxPoints,
+  body.viewer-mode label[for="attendanceMaxPoints"],
+  body.viewer-mode #saveAttendanceBtn,
+  body.viewer-mode #attendanceSavedMsg,
+  body.viewer-mode .danger-zone{
+    display:none !important;
+  }
+  .crest-name-input[readonly]{cursor:default; opacity:0.9;}
+  .ut-readonly{font-size:0.78rem; opacity:0.7;}
+  .test-score-max{opacity:0.85;}

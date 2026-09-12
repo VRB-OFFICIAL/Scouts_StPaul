@@ -2,6 +2,26 @@
   const COLLECTION = 'troopTracker';
   const DOC_ID = 'data';
 
+  // ---------- LOGIN / ROLE ----------
+  // Two access codes gate the app: entering the editor code unlocks full
+  // editing, entering the viewer code unlocks read-only viewing (people can
+  // still browse groups, attendance, points, tests and open member files —
+  // they just can't change anything, including roles). Change these two
+  // codes to whatever you like before sharing the app with your troop.
+  //
+  // NOTE ON SECURITY: this check happens in the browser, so it keeps
+  // honest people honest and stops casual/accidental edits — it is not a
+  // substitute for real server-side authentication. Anyone who really
+  // wanted to could read this file and find the codes, or connect to
+  // Firestore directly. For a troop tracker that's normally an acceptable
+  // trade-off, but don't use this pattern for anything sensitive.
+  const EDITOR_CODE = 'troop-editor';
+  const VIEWER_CODE = 'troop-viewer';
+  const ROLE_KEY = 'troopTrackerRole';
+
+  let currentRole = null; // 'editor' | 'viewer' | null (not logged in yet)
+  function isEditor(){ return currentRole === 'editor'; }
+
   function defaultData(){
     return {
       groups: [
@@ -77,6 +97,52 @@
     });
     return { gained, lost, net: gained - lost };
   }
+
+  // ---------- LOGIN SCREEN ----------
+  const loginScreen = document.getElementById('loginScreen');
+  const loginForm = document.getElementById('loginForm');
+  const loginCodeInput = document.getElementById('loginCode');
+  const loginError = document.getElementById('loginError');
+  const roleBadge = document.getElementById('roleBadge');
+  const logoutBtn = document.getElementById('logoutBtn');
+  let appStarted = false; // guards against calling initFirebase() more than once
+
+  function startApp(role){
+    currentRole = role;
+    document.body.classList.remove('not-authed');
+    document.body.classList.toggle('viewer-mode', role === 'viewer');
+    loginScreen.classList.remove('show');
+    roleBadge.textContent = role === 'editor' ? 'Editor' : 'Viewer';
+    roleBadge.className = 'role-badge ' + role;
+    renderAll();
+    if(!appStarted){
+      appStarted = true;
+      initFirebase();
+    }
+  }
+
+  loginForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const code = loginCodeInput.value.trim();
+    let role = null;
+    if(code && code === EDITOR_CODE) role = 'editor';
+    else if(code && code === VIEWER_CODE) role = 'viewer';
+    if(!role){
+      loginError.textContent = 'That code is not recognized — try again.';
+      loginError.classList.add('show');
+      loginCodeInput.select();
+      return;
+    }
+    loginError.classList.remove('show');
+    localStorage.setItem(ROLE_KEY, role);
+    loginCodeInput.value = '';
+    startApp(role);
+  });
+
+  logoutBtn.addEventListener('click', ()=>{
+    localStorage.removeItem(ROLE_KEY);
+    location.reload();
+  });
 
   // ---------- STATUS BANNER ----------
   function showStatus(msg, isError){
@@ -174,7 +240,7 @@
       card.innerHTML = `
         <div class="crest-header">
           <div class="crest-badge">${group.members.length}</div>
-          <input class="crest-name-input" value="${escapeAttr(group.name)}" data-group="${group.id}">
+          <input class="crest-name-input" value="${escapeAttr(group.name)}" data-group="${group.id}" ${isEditor() ? '' : 'readonly'}>
           <div class="crest-points">Total points: <strong>${total}</strong></div>
         </div>
         <div class="crest-body">
@@ -188,16 +254,17 @@
                 <span class="member-actions">
                   <span class="member-points">${memberTotals(m).net}</span>
                   <button class="icon-btn file-btn" data-member-file="${m.id}" title="Open ${escapeAttr(m.name)}'s file">📇</button>
-                  <button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>
-                  <button class="icon-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>
+                  ${isEditor() ? `<button class="icon-btn role-edit-btn" data-edit-role="${m.id}" title="Set role">✎</button>` : ''}
+                  ${isEditor() ? `<button class="icon-btn remove-member-btn" data-remove-member="${group.id}|${m.id}" title="Remove person">✕</button>` : ''}
                 </span>
               </li>
             `).join('') : '<li class="empty-msg">No one added yet</li>'}
           </ul>
+          ${isEditor() ? `
           <div class="add-member-row">
             <input type="text" placeholder="Add a person's name" data-add-input="${group.id}">
             <button data-add-btn="${group.id}">Add</button>
-          </div>
+          </div>` : ''}
         </div>
       `;
       grid.appendChild(card);
@@ -206,6 +273,7 @@
     // wire up group name edits
     grid.querySelectorAll('.crest-name-input').forEach(inp=>{
       inp.addEventListener('change', ()=>{
+        if(!isEditor()) return;
         const g = data.groups.find(g=>g.id===inp.dataset.group);
         if(g){ g.name = inp.value.trim() || g.name; saveData(); renderGroups(); }
       });
@@ -219,6 +287,7 @@
     // wire up member role edits
     grid.querySelectorAll('[data-edit-role]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const m = findMemberById(btn.dataset.editRole);
         if(!m) return;
         const newRole = prompt('Role (e.g. Leader, 2nd in Command, 1st Year):', m.role || '');
@@ -234,6 +303,7 @@
       const groupId = btn.dataset.addBtn;
       const input = grid.querySelector(`[data-add-input="${groupId}"]`);
       const addFn = ()=>{
+        if(!isEditor()) return;
         const name = input.value.trim();
         if(!name) return;
         const g = data.groups.find(g=>g.id===groupId);
@@ -248,6 +318,7 @@
     // remove member buttons
     grid.querySelectorAll('[data-remove-member]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const [groupId, memberId] = btn.dataset.removeMember.split('|');
         const g = data.groups.find(g=>g.id===groupId);
         g.members = g.members.filter(m=>m.id!==memberId);
@@ -343,10 +414,12 @@
           const summary = statusSummaryText(sel);
           const uniformVal = sel.uniform === undefined || sel.uniform === null ? '' : sel.uniform;
           const toolsVal = sel.tools === undefined || sel.tools === null ? '' : sel.tools;
+          const [uniformLabel, toolsLabel, overallLabel] = formatUniformToolsLabels(sel, currentMaxPoints);
           return `
           <div class="attendance-row-group">
             <div class="attendance-row">
               <span class="a-name">${escapeHtml(m.name)}${summary ? ` <span class="a-summary ${status}">· ${escapeHtml(summary)}</span>` : ''}</span>
+              ${isEditor() ? `
               <div class="uniform-tools-inputs">
                 <label class="ut-label">Uniform <input type="number" min="0" max="${currentMaxPoints}" class="ut-input" data-member="${m.id}" data-kind="uniform" value="${escapeAttr(uniformVal)}" placeholder="/${currentMaxPoints}"></label>
                 <label class="ut-label">Tools <input type="number" min="0" max="${currentMaxPoints}" class="ut-input" data-member="${m.id}" data-kind="tools" value="${escapeAttr(toolsVal)}" placeholder="/${currentMaxPoints}"></label>
@@ -355,8 +428,10 @@
                 <button class="status-btn present ${status==='present'?'selected':''}" data-member="${m.id}" data-status="present">Present</button>
                 <button class="status-btn late ${status==='late'?'selected':''}" data-member="${m.id}" data-status="late">Late</button>
                 <button class="status-btn absent ${status==='absent'?'selected':''}" data-member="${m.id}" data-status="absent">Absent</button>
-              </div>
+              </div>` : `
+              <div class="ut-readonly">${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)} · ${escapeHtml(overallLabel)}</div>`}
             </div>
+            ${isEditor() ? `
             <div class="detail-row absent-detail ${status==='absent'?'show':''}" data-member="${m.id}">
               <span class="detail-label">Reason:</span>
               <div class="sub-btns">
@@ -371,7 +446,7 @@
                 <button class="unit-btn ${lateUnit==='minutes'?'selected':''}" data-member="${m.id}" data-unit="minutes">Minutes</button>
                 <button class="unit-btn ${lateUnit==='hours'?'selected':''}" data-member="${m.id}" data-unit="hours">Hours</button>
               </div>
-            </div>
+            </div>` : ''}
           </div>`;
         }).join('') : '<div class="empty-msg">No one in this group yet — add people in the Groups tab.</div>'}
       `;
@@ -380,6 +455,7 @@
 
     wrap.querySelectorAll('.status-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const memberId = btn.dataset.member;
         const status = btn.dataset.status;
         const existingSel = normalizeRecord(currentAttendanceSelections[memberId]);
@@ -397,6 +473,7 @@
 
     wrap.querySelectorAll('.sub-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const memberId = btn.dataset.member;
         const sel = normalizeRecord(currentAttendanceSelections[memberId]);
         sel.status = 'absent';
@@ -408,6 +485,7 @@
 
     wrap.querySelectorAll('.unit-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const memberId = btn.dataset.member;
         const sel = normalizeRecord(currentAttendanceSelections[memberId]);
         sel.status = 'late';
@@ -419,6 +497,7 @@
 
     wrap.querySelectorAll('.late-amount').forEach(inp=>{
       inp.addEventListener('input', ()=>{
+        if(!isEditor()) return;
         const memberId = inp.dataset.member;
         const sel = normalizeRecord(currentAttendanceSelections[memberId]);
         sel.status = 'late';
@@ -444,6 +523,7 @@
 
     wrap.querySelectorAll('.ut-input').forEach(inp=>{
       inp.addEventListener('input', ()=>{
+        if(!isEditor()) return;
         const memberId = inp.dataset.member;
         const kind = inp.dataset.kind; // 'uniform' or 'tools'
         const sel = normalizeRecord(currentAttendanceSelections[memberId]);
@@ -460,6 +540,7 @@
         currentAttendanceSelections[memberId] = sel;
       });
       inp.addEventListener('change', ()=>{
+        if(!isEditor()) return;
         // Reflect any clamping (e.g. typed value above max) back into the field
         const memberId = inp.dataset.member;
         const kind = inp.dataset.kind;
@@ -494,6 +575,7 @@
   setDeleteAllArmed(false);
 
   armDeleteAllBtn.addEventListener('click', ()=>{
+    if(!isEditor()) return;
     if(deleteAllArmed){
       setDeleteAllArmed(false);
       return;
@@ -504,6 +586,7 @@
   });
 
   deleteAllPastBtn.addEventListener('click', ()=>{
+    if(!isEditor()) return;
     if(!deleteAllArmed) return;
     const unlockedCount = data.attendance.filter(a=>!a.locked).length;
     if(unlockedCount === 0){
@@ -520,6 +603,7 @@
   });
 
   attendanceMaxPointsInput.addEventListener('change', ()=>{
+    if(!isEditor()) return;
     let val = parseInt(attendanceMaxPointsInput.value, 10);
     if(isNaN(val) || val < 0) val = 10;
     currentMaxPoints = val;
@@ -533,6 +617,7 @@
   });
 
   document.getElementById('saveAttendanceBtn').addEventListener('click', ()=>{
+    if(!isEditor()) return;
     const dateStr = attendanceDateInput.value;
     if(!dateStr) return;
     const existingIdx = data.attendance.findIndex(a=>a.date===dateStr);
@@ -606,7 +691,7 @@
         const sel = normalizeRecord(record);
         const label = formatRecordLabel(findMemberName(memberId), record);
         const [uniformLabel, toolsLabel, overallLabel] = formatUniformToolsLabels(record, maxPoints);
-        const removeBtn = locked ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
+        const removeBtn = (locked || !isEditor()) ? '' : `<button class="tag-remove" data-remove-date="${entry.date}" data-remove-member="${memberId}" title="Remove ${escapeAttr(findMemberName(memberId))} from this meeting">✕</button>`;
         const mainTag = `<span class="tag ${sel.status}">${escapeHtml(label)} <span class="tag-ut-inline">· ${escapeHtml(uniformLabel)} · ${escapeHtml(toolsLabel)} · ${escapeHtml(overallLabel)}</span>${removeBtn}</span>`;
         return mainTag;
       }).join('');
@@ -614,10 +699,11 @@
       <div class="history-entry ${locked?'locked':''}">
         <div class="history-entry-header">
           <span class="h-date">${entry.date}${locked ? ' <span class="lock-label">Locked</span>' : ''} <span class="h-max-points">Max: ${maxPoints}</span></span>
+          ${isEditor() ? `
           <div class="history-entry-actions">
             <button class="icon-btn lock-btn" data-lock-date="${entry.date}" title="${locked?'Unlock this meeting':'Lock this meeting'}">${locked?'🔒':'🔓'}</button>
             <button class="icon-btn delete-btn" data-delete-date="${entry.date}" title="${locked?'Locked — unlock to delete':'Delete this meeting'}" ${locked?'disabled':''}>✕</button>
-          </div>
+          </div>` : ''}
         </div>
         <div class="history-tags">${tags || '<span class="empty-msg">No records</span>'}</div>
       </div>`;
@@ -625,6 +711,7 @@
 
     list.querySelectorAll('.lock-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const date = btn.dataset.lockDate;
         const entry = data.attendance.find(a=>a.date===date);
         if(!entry) return;
@@ -636,6 +723,7 @@
 
     list.querySelectorAll('.delete-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const date = btn.dataset.deleteDate;
         const entry = data.attendance.find(a=>a.date===date);
         if(!entry || entry.locked) return; // locked meetings can't be deleted
@@ -648,6 +736,7 @@
 
     list.querySelectorAll('.tag-remove').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
+        if(!isEditor()) return;
         e.stopPropagation();
         const date = btn.dataset.removeDate;
         const memberId = btn.dataset.removeMember;
@@ -681,6 +770,7 @@
   pointsGroupSelect.addEventListener('change', populateMemberSelect);
 
   document.getElementById('addPointsBtn').addEventListener('click', ()=>{
+    if(!isEditor()) return;
     const g = data.groups.find(g=>g.id===pointsGroupSelect.value);
     const memberId = pointsMemberSelect.value;
     const amount = parseInt(document.getElementById('pointsAmount').value, 10) || 0;
@@ -744,16 +834,18 @@
                   <span class="bd-log-date">${e.date}</span>
                   <span class="bd-log-reason">${escapeHtml(e.reason||'')}</span>
                   <span class="bd-log-amount ${e.amount>0?'gained':'lost'}">${e.amount>0?'+':''}${e.amount}</span>
+                  ${isEditor() ? `
                   <button class="icon-btn bd-edit" data-edit-entry="${m.id}|${e.id}" title="Edit">✎</button>
-                  <button class="icon-btn bd-delete" data-delete-entry="${m.id}|${e.id}" title="Delete">✕</button>
+                  <button class="icon-btn bd-delete" data-delete-entry="${m.id}|${e.id}" title="Delete">✕</button>` : ''}
                 </div>
               `).join('') : '<p class="empty-msg">No point history yet</p>'}
+              ${isEditor() ? `
               <div class="bd-add-row">
                 <input type="date" class="bd-add-date" data-member="${m.id}" value="${new Date().toISOString().slice(0,10)}">
                 <input type="number" class="bd-add-amount" data-member="${m.id}" placeholder="+/- amount">
                 <input type="text" class="bd-add-reason" data-member="${m.id}" placeholder="Reason">
                 <button class="bd-add-btn" data-add-entry="${m.id}">Add</button>
-              </div>
+              </div>` : ''}
             </div>
           </div>
         `;
@@ -790,6 +882,7 @@
 
     wrap.querySelectorAll('[data-add-entry]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const memberId = btn.dataset.addEntry;
         const member = findMemberById(memberId);
         if(!member) return;
@@ -813,6 +906,7 @@
 
     wrap.querySelectorAll('[data-edit-entry]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const [memberId, entryId] = btn.dataset.editEntry.split('|');
         const member = findMemberById(memberId);
         const entry = member && member.pointLog.find(e=>e.id===entryId);
@@ -836,6 +930,7 @@
 
     wrap.querySelectorAll('[data-delete-entry]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const [memberId, entryId] = btn.dataset.deleteEntry.split('|');
         const member = findMemberById(memberId);
         if(!member) return;
@@ -855,6 +950,7 @@
   testDateInput.valueAsDate = new Date();
 
   document.getElementById('addTestBtn').addEventListener('click', ()=>{
+    if(!isEditor()) return;
     const name = testNameInput.value.trim();
     if(!name) return;
     const date = testDateInput.value || new Date().toISOString().slice(0,10);
@@ -885,17 +981,19 @@
         const rows = g.members.map(m=>{
           const rec = testRecord(test, m.id);
           const scoreVal = (rec.score===null || rec.score===undefined) ? '' : rec.score;
-          return `
-            <div class="test-row">
-              <button class="test-name-btn" data-test-open-member="${m.id}" title="Open ${escapeAttr(m.name)}'s file">${escapeHtml(m.name)}</button>
-              <div class="test-row-controls">
+          const controls = isEditor() ? `
                 <input type="number" min="0" max="${test.maxScore}" class="test-score-input" data-test="${test.id}" data-member="${m.id}" value="${escapeAttr(scoreVal)}" placeholder="0">
                 <span class="test-score-max">/ ${test.maxScore}</span>
                 <div class="pf-btns">
                   <button class="pf-btn pass ${rec.result==='pass'?'selected':''}" data-test="${test.id}" data-member="${m.id}" data-result="pass">Pass</button>
                   <button class="pf-btn fail ${rec.result==='fail'?'selected':''}" data-test="${test.id}" data-member="${m.id}" data-result="fail">Fail</button>
-                </div>
-              </div>
+                </div>` : `
+                <span class="test-score-max">${scoreVal!=='' ? `${scoreVal} / ${test.maxScore}` : 'Not graded'}</span>
+                ${rec.result ? `<span class="mf-test-tag ${rec.result}">${rec.result==='pass'?'Pass':'Fail'}</span>` : ''}`;
+          return `
+            <div class="test-row">
+              <button class="test-name-btn" data-test-open-member="${m.id}" title="Open ${escapeAttr(m.name)}'s file">${escapeHtml(m.name)}</button>
+              <div class="test-row-controls">${controls}</div>
             </div>
           `;
         }).join('');
@@ -906,9 +1004,10 @@
         <div class="test-card">
           <div class="test-card-header">
             <h3>${escapeHtml(test.name)}<span class="test-meta">${test.date}</span></h3>
+            ${isEditor() ? `
             <div class="test-card-actions">
               <button class="test-delete-btn" data-delete-test="${test.id}" title="Delete this test">✕</button>
-            </div>
+            </div>` : ''}
           </div>
           ${groupBlocks || '<p class="empty-msg">No one in any group yet.</p>'}
         </div>
@@ -921,6 +1020,7 @@
 
     wrap.querySelectorAll('.test-score-input').forEach(inp=>{
       inp.addEventListener('change', ()=>{
+        if(!isEditor()) return;
         const test = data.tests.find(t=>t.id===inp.dataset.test);
         if(!test) return;
         const memberId = inp.dataset.member;
@@ -941,6 +1041,7 @@
 
     wrap.querySelectorAll('.pf-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const test = data.tests.find(t=>t.id===btn.dataset.test);
         if(!test) return;
         const memberId = btn.dataset.member;
@@ -955,6 +1056,7 @@
 
     wrap.querySelectorAll('[data-delete-test]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        if(!isEditor()) return;
         const testId = btn.dataset.deleteTest;
         const test = data.tests.find(t=>t.id===testId);
         if(!test) return;
@@ -1197,6 +1299,9 @@
   function escapeAttr(str){ return escapeHtml(str); }
 
   // ---------- init ----------
-  renderGroups();
-  initFirebase();
+  const savedRole = localStorage.getItem(ROLE_KEY);
+  if(savedRole === 'editor' || savedRole === 'viewer'){
+    startApp(savedRole);
+  }
+  // otherwise the login screen (shown by default) waits for a code
 })();

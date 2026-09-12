@@ -6,13 +6,31 @@
 <title>Troop Tracker — Groups, Attendance & Points</title>
 <link rel="stylesheet" href="styles.css?v=13">
 </head>
-<body>
+<body class="not-authed">
+
+<!-- LOGIN SCREEN — must enter an editor or viewer code to see the app -->
+<div id="loginScreen" class="login-overlay show">
+  <div class="login-card">
+    <h2>⚜ Troop Tracker</h2>
+    <p class="login-sub">Enter your access code to continue.</p>
+    <form id="loginForm">
+      <input type="password" id="loginCode" placeholder="Access code" autocomplete="off" autofocus>
+      <button type="submit" class="primary-btn">Log in</button>
+    </form>
+    <p id="loginError" class="login-error"></p>
+    <p class="login-hint">Editors can add and change data. Viewers can look at everything — groups, attendance, points, tests and people's files — but can't make changes.</p>
+  </div>
+</div>
 
 <div id="connectionStatus"></div>
 
 <header>
   <h1>⚜ Troop Tracker</h1>
   <p>Groups &middot; Attendance &middot; Points &middot; Breakdown</p>
+  <div class="header-account">
+    <span id="roleBadge" class="role-badge"></span>
+    <button id="logoutBtn" class="logout-btn" type="button">Log out</button>
+  </div>
   <div class="rope-divider"></div>
 </header>
 
