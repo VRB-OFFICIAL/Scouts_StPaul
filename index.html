@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Troop Tracker — Groups, Attendance & Points</title>
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body class="not-authed">
 
@@ -42,6 +42,7 @@
   <button data-view="points">Points &amp; Leaderboard</button>
   <button data-view="breakdown">Groups Breakdown</button>
   <button data-view="tests">Tests</button>
+  <button data-view="albums">Albums</button>
 </nav>
 
 <main>
@@ -129,6 +130,11 @@
     <div id="testsList"></div>
   </section>
 
+  <!-- ALBUMS VIEW -->
+  <section id="view-albums" class="view">
+    <div id="albumsContent"></div>
+  </section>
+
 </main>
 
 <footer>Troop Tracker — data is synced live across devices via Firebase.</footer>
@@ -149,12 +155,24 @@
   </div>
 </div>
 
+<!-- PHOTO VIEWER -->
+<div id="pvOverlay" class="pv-overlay">
+  <button class="pv-close" id="pvClose" title="Close">✕</button>
+  <button class="pv-arrow pv-prev" id="pvPrev" title="Previous">‹</button>
+  <figure class="pv-figure">
+    <img id="pvImg" alt="">
+    <figcaption id="pvCaption"></figcaption>
+    <div class="pv-actions" id="pvActions"></div>
+  </figure>
+  <button class="pv-arrow pv-next" id="pvNext" title="Next">›</button>
+</div>
+
 <!-- Firebase (compat SDKs — simplest to use with plain script tags) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
-<script src="script.js?v=14"></script>
+<script src="script.js?v=15"></script>
 
 </body>
 </html>

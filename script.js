@@ -176,6 +176,7 @@
     firebase.auth().onAuthStateChanged(user=>{
       if(!user) return;
       docRef = firebase.firestore().collection(COLLECTION).doc(DOC_ID);
+      startAlbumsListener();
       docRef.onSnapshot(snapshot=>{
         const snap = snapshot.data();
         let parsed = null;
@@ -215,6 +216,7 @@
     if(activeView === 'points') renderPointsView();
     if(activeView === 'breakdown') renderBreakdownView();
     if(activeView === 'tests') renderTestsView();
+    if(activeView === 'albums') renderAlbumsView();
   }
 
   // ---------- NAV ----------
@@ -229,6 +231,7 @@
       if(btn.dataset.view === 'points') renderPointsView();
       if(btn.dataset.view === 'breakdown') renderBreakdownView();
       if(btn.dataset.view === 'tests') renderTestsView();
+      if(btn.dataset.view === 'albums') renderAlbumsView();
     });
   });
 
@@ -1300,6 +1303,274 @@
     return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
   }
   function escapeAttr(str){ return escapeHtml(str); }
+
+  // ---------- ALBUMS ----------
+  // Albums live in their own Firestore collections (not the main data doc)
+  // so photos can't bloat it. Each photo is shrunk in the browser first
+  // (full ≈1280px + a small thumbnail) and stored as its own document.
+  const ALBUMS_COLLECTION = 'troopAlbums';
+  const PHOTOS_COLLECTION = 'troopPhotos';
+  let albums = [];
+  let openAlbumId = null;
+  let albumPhotos = [];
+  let albumsUnsub = null;
+  let photosUnsub = null;
+  let pvIndex = -1;
+
+  function startAlbumsListener(){
+    if(albumsUnsub) return;
+    albumsUnsub = firebase.firestore().collection(ALBUMS_COLLECTION).onSnapshot(snap=>{
+      albums = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      if(openAlbumId && !albums.find(a=>a.id===openAlbumId)) closeAlbum();
+      renderAlbumsView();
+    }, err=>{
+      console.error('Albums read failed', err);
+      showStatus('Albums error: ' + (err.code || err.message || err) + ' — publish the updated Firestore rules.', true);
+    });
+  }
+
+  function openAlbum(id){
+    openAlbumId = id;
+    albumPhotos = [];
+    if(photosUnsub){ photosUnsub(); photosUnsub = null; }
+    photosUnsub = firebase.firestore().collection(PHOTOS_COLLECTION).where('albumId','==',id).onSnapshot(snap=>{
+      albumPhotos = snap.docs.map(d=>({ id:d.id, ...d.data() })).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      if(pvIndex >= albumPhotos.length) pvIndex = albumPhotos.length - 1;
+      renderAlbumsView();
+      if(pvIndex >= 0) updateViewer(); else closeViewer();
+    }, err=>{
+      console.error('Photos read failed', err);
+      showStatus('Photos error: ' + (err.code || err.message || err), true);
+    });
+    renderAlbumsView();
+  }
+
+  function closeAlbum(){
+    openAlbumId = null;
+    albumPhotos = [];
+    if(photosUnsub){ photosUnsub(); photosUnsub = null; }
+    closeViewer();
+    renderAlbumsView();
+  }
+
+  function renderAlbumsView(){
+    const wrap = document.getElementById('albumsContent');
+    if(!wrap) return;
+    if(typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length){
+      wrap.innerHTML = '<p class="empty-msg">Albums need Firebase to be configured.</p>';
+      return;
+    }
+    if(openAlbumId){ renderAlbumDetail(wrap); return; }
+
+    const sorted = [...albums].sort((a,b)=>
+      String(b.year||'').localeCompare(String(a.year||'')) || (b.createdAt||0)-(a.createdAt||0));
+    const byYear = {};
+    sorted.forEach(a=>{ const y = a.year || 'Other'; (byYear[y] = byYear[y] || []).push(a); });
+
+    wrap.innerHTML = `
+      ${isEditor() ? `
+      <div class="album-form">
+        <div><label for="albumName">Album name</label>
+          <input type="text" id="albumName" placeholder="e.g. Summer Camp"></div>
+        <div><label for="albumYear">Year</label>
+          <input type="number" id="albumYear" value="${new Date().getFullYear()}"></div>
+        <div><button class="primary-btn" id="addAlbumBtn">Create album</button></div>
+      </div>` : ''}
+      ${sorted.length ? Object.keys(byYear).map(y=>`
+        <h3 class="album-year">${escapeHtml(y)}</h3>
+        <div class="album-grid">
+          ${byYear[y].map(a=>`
+            <button class="album-card" data-open-album="${a.id}">
+              <div class="album-cover">${a.cover ? `<img src="${a.cover}" alt="">` : '<span>📷</span>'}</div>
+              <div class="album-info"><strong>${escapeHtml(a.name)}</strong>
+                <span>${a.count||0} photo${(a.count||0)===1?'':'s'}</span></div>
+            </button>`).join('')}
+        </div>`).join('') : '<p class="empty-msg">No albums yet.</p>'}
+    `;
+
+    wrap.querySelectorAll('[data-open-album]').forEach(b=>{
+      b.addEventListener('click', ()=> openAlbum(b.dataset.openAlbum));
+    });
+    const addBtn = document.getElementById('addAlbumBtn');
+    if(addBtn) addBtn.addEventListener('click', ()=>{
+      if(!isEditor()) return;
+      const name = document.getElementById('albumName').value.trim();
+      if(!name) return;
+      const year = document.getElementById('albumYear').value.trim();
+      firebase.firestore().collection(ALBUMS_COLLECTION)
+        .add({ name, year, cover:'', count:0, createdAt: Date.now() })
+        .catch(e=> showStatus('Could not create album: ' + (e.code || e.message), true));
+    });
+  }
+
+  function renderAlbumDetail(wrap){
+    const album = albums.find(a=>a.id===openAlbumId);
+    if(!album){ closeAlbum(); return; }
+    wrap.innerHTML = `
+      <div class="album-header">
+        <button class="album-back" id="albumBackBtn">‹ All albums</button>
+        <h3>${escapeHtml(album.name)}<span class="test-meta">${escapeHtml(album.year||'')}</span></h3>
+        ${isEditor() ? `
+        <div class="album-actions">
+          <label class="primary-btn album-upload">+ Add photos
+            <input type="file" id="albumFileInput" accept="image/*" multiple hidden></label>
+          <button class="test-delete-btn" id="deleteAlbumBtn" title="Delete this album">✕</button>
+        </div>` : ''}
+      </div>
+      ${albumPhotos.length ? `<div class="photo-grid">
+        ${albumPhotos.map((p,i)=>`
+          <button class="photo-tile" data-photo="${i}"><img src="${p.thumb}" alt="${escapeAttr(p.caption||'')}" loading="lazy"></button>`).join('')}
+      </div>` : '<p class="empty-msg">No photos in this album yet.</p>'}
+    `;
+    document.getElementById('albumBackBtn').addEventListener('click', closeAlbum);
+    wrap.querySelectorAll('[data-photo]').forEach(b=>{
+      b.addEventListener('click', ()=>{ pvIndex = parseInt(b.dataset.photo,10); updateViewer(); });
+    });
+    const fileInput = document.getElementById('albumFileInput');
+    if(fileInput) fileInput.addEventListener('change', ()=>{
+      const files = Array.from(fileInput.files);
+      fileInput.value = '';
+      uploadPhotos(files);
+    });
+    const delBtn = document.getElementById('deleteAlbumBtn');
+    if(delBtn) delBtn.addEventListener('click', deleteAlbum);
+  }
+
+  function loadImage(file){
+    return new Promise((res, rej)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); res(img); };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); rej(new Error('Could not read image')); };
+      img.src = url;
+    });
+  }
+  function resizeToDataUrl(img, maxEdge, quality){
+    const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+  async function compressImage(file){
+    const img = await loadImage(file);
+    let q = 0.72;
+    let full = resizeToDataUrl(img, 1280, q);
+    while(full.length > 800000 && q > 0.4){ q -= 0.1; full = resizeToDataUrl(img, 1280, q); }
+    const thumb = resizeToDataUrl(img, 360, 0.7);
+    return { full, thumb };
+  }
+
+  async function uploadPhotos(files){
+    if(!isEditor() || !openAlbumId || !files.length) return;
+    const db = firebase.firestore();
+    const albumId = openAlbumId;
+    const albumRef = db.collection(ALBUMS_COLLECTION).doc(albumId);
+    const startAlbum = albums.find(a=>a.id===albumId);
+    let hasCover = !!(startAlbum && startAlbum.cover);
+    let done = 0, failed = 0;
+    for(const file of files){
+      showStatus(`Uploading ${done + failed + 1} of ${files.length}…`, false);
+      try{
+        if(!file.type.startsWith('image/')) throw new Error('Not an image');
+        const { full, thumb } = await compressImage(file);
+        await db.collection(PHOTOS_COLLECTION).add({ albumId, full, thumb, caption:'', createdAt: Date.now() });
+        const upd = { count: firebase.firestore.FieldValue.increment(1) };
+        if(!hasCover){ upd.cover = thumb; hasCover = true; }
+        await albumRef.update(upd);
+        done++;
+      }catch(e){
+        console.error('Photo upload failed', e);
+        failed++;
+      }
+    }
+    showStatus(failed ? `Uploaded ${done}, ${failed} failed` : `Uploaded ${done} photo${done===1?'':'s'} ✓`, !!failed);
+  }
+
+  async function deleteAlbum(){
+    if(!isEditor() || !openAlbumId) return;
+    const album = albums.find(a=>a.id===openAlbumId);
+    if(!album) return;
+    if(!confirm(`Delete the album "${album.name}" and all its photos? This can't be undone.`)) return;
+    const db = firebase.firestore();
+    const id = openAlbumId;
+    try{
+      const snap = await db.collection(PHOTOS_COLLECTION).where('albumId','==',id).get();
+      for(let i = 0; i < snap.docs.length; i += 400){
+        const batch = db.batch();
+        snap.docs.slice(i, i + 400).forEach(d=> batch.delete(d.ref));
+        await batch.commit();
+      }
+      await db.collection(ALBUMS_COLLECTION).doc(id).delete();
+    }catch(e){
+      showStatus('Could not delete album: ' + (e.code || e.message), true);
+    }
+  }
+
+  async function deletePhoto(photo){
+    if(!isEditor()) return;
+    if(!confirm('Delete this photo? This can\'t be undone.')) return;
+    const db = firebase.firestore();
+    try{
+      await db.collection(PHOTOS_COLLECTION).doc(photo.id).delete();
+      const album = albums.find(a=>a.id===photo.albumId);
+      const upd = { count: firebase.firestore.FieldValue.increment(-1) };
+      if(album && album.cover === photo.thumb){
+        const other = albumPhotos.find(p=>p.id!==photo.id);
+        upd.cover = other ? other.thumb : '';
+      }
+      await db.collection(ALBUMS_COLLECTION).doc(photo.albumId).update(upd);
+    }catch(e){
+      showStatus('Could not delete photo: ' + (e.code || e.message), true);
+    }
+  }
+
+  // ----- photo viewer (lightbox) -----
+  const pvOverlay = document.getElementById('pvOverlay');
+  function updateViewer(){
+    const p = albumPhotos[pvIndex];
+    if(!p){ closeViewer(); return; }
+    document.getElementById('pvImg').src = p.full;
+    document.getElementById('pvCaption').textContent = p.caption || '';
+    document.getElementById('pvActions').innerHTML = isEditor() ? `
+      <button class="pv-btn" id="pvCaptionBtn">Edit caption</button>
+      <button class="pv-btn danger" id="pvDeleteBtn">Delete photo</button>` : '';
+    const capBtn = document.getElementById('pvCaptionBtn');
+    if(capBtn) capBtn.addEventListener('click', ()=>{
+      const cap = prompt('Caption:', p.caption || '');
+      if(cap === null) return;
+      firebase.firestore().collection(PHOTOS_COLLECTION).doc(p.id).update({ caption: cap.trim() });
+    });
+    const delBtn = document.getElementById('pvDeleteBtn');
+    if(delBtn) delBtn.addEventListener('click', ()=> deletePhoto(p));
+    document.getElementById('pvPrev').style.visibility = albumPhotos.length > 1 ? 'visible' : 'hidden';
+    document.getElementById('pvNext').style.visibility = albumPhotos.length > 1 ? 'visible' : 'hidden';
+    pvOverlay.classList.add('show');
+  }
+  function closeViewer(){
+    pvIndex = -1;
+    pvOverlay.classList.remove('show');
+    document.getElementById('pvImg').removeAttribute('src');
+  }
+  function stepViewer(d){
+    if(!albumPhotos.length) return;
+    pvIndex = (pvIndex + d + albumPhotos.length) % albumPhotos.length;
+    updateViewer();
+  }
+  document.getElementById('pvClose').addEventListener('click', closeViewer);
+  document.getElementById('pvPrev').addEventListener('click', ()=> stepViewer(-1));
+  document.getElementById('pvNext').addEventListener('click', ()=> stepViewer(1));
+  pvOverlay.addEventListener('click', e=>{ if(e.target === pvOverlay) closeViewer(); });
+  document.addEventListener('keydown', e=>{
+    if(pvIndex < 0) return;
+    if(e.key === 'Escape') closeViewer();
+    if(e.key === 'ArrowLeft') stepViewer(-1);
+    if(e.key === 'ArrowRight') stepViewer(1);
+  });
 
   // ---------- init ----------
   const savedRole = localStorage.getItem(ROLE_KEY);

@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Troop Tracker app data: one shared doc, everyone signed in (including
+    // anonymous sign-in, which is what this app uses) can read and write it.
+    match /troopTracker/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Albums page: album info and the photos inside them.
+    match /troopAlbums/{albumId} {
+      allow read, write: if request.auth != null;
+    }
+    match /troopPhotos/{photoId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Everything else is denied by default.
+  }
+}

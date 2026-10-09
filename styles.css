@@ -1092,3 +1092,144 @@
   .crest-name-input[readonly]{cursor:default; opacity:0.9;}
   .ut-readonly{font-size:0.78rem; opacity:0.7;}
   .test-score-max{opacity:0.85;}
+
+  /* Albums */
+  .album-form{
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    border-radius:10px;
+    padding:18px;
+    margin-bottom:24px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:flex-end;
+  }
+  .album-form > div{display:flex; flex-direction:column; gap:4px;}
+  .album-form label{font-size:0.8rem; color:var(--gold-100); opacity:0.8;}
+  .album-form input{
+    background:var(--navy-900);
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    padding:8px 10px;
+    border-radius:5px;
+    font-size:0.9rem;
+  }
+  .album-form input[type=number]{width:100px;}
+  .album-year{margin:22px 0 10px; color:var(--gold-300); font-size:1.15rem;}
+  .album-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(190px, 1fr));
+    gap:14px;
+  }
+  .album-card{
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    border-radius:10px;
+    padding:0;
+    overflow:hidden;
+    cursor:pointer;
+    color:var(--cream);
+    text-align:left;
+    transition:border-color 0.15s, transform 0.15s;
+  }
+  .album-card:hover{border-color:var(--gold-500); transform:translateY(-2px);}
+  .album-cover{
+    aspect-ratio:4/3;
+    background:var(--navy-900);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2.2rem;
+    opacity:1;
+  }
+  .album-cover img{width:100%; height:100%; object-fit:cover; display:block;}
+  .album-info{padding:10px 12px; display:flex; flex-direction:column; gap:2px;}
+  .album-info span{font-size:0.78rem; opacity:0.65;}
+  .album-header{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+  .album-header h3{margin:0; color:var(--gold-300); flex:1; min-width:140px;}
+  .album-back{
+    background:none;
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    padding:6px 12px;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .album-back:hover{border-color:var(--gold-500);}
+  .album-actions{display:flex; align-items:center; gap:10px;}
+  .album-upload{display:inline-block; cursor:pointer;}
+  .photo-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+    gap:8px;
+  }
+  .photo-tile{
+    padding:0;
+    border:1px solid var(--navy-700);
+    border-radius:6px;
+    overflow:hidden;
+    background:var(--navy-900);
+    cursor:pointer;
+    aspect-ratio:1/1;
+  }
+  .photo-tile:hover{border-color:var(--gold-500);}
+  .photo-tile img{width:100%; height:100%; object-fit:cover; display:block;}
+
+  /* Photo viewer */
+  .pv-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:2100;
+    background:rgba(4,9,18,0.94);
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:16px;
+  }
+  .pv-overlay.show{display:flex;}
+  .pv-figure{
+    margin:0;
+    max-width:min(900px, 100%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+  }
+  .pv-figure img{max-width:100%; max-height:72vh; border-radius:6px; display:block;}
+  #pvCaption{font-size:0.95rem; text-align:center; min-height:1.2em;}
+  .pv-actions{display:flex; gap:8px;}
+  .pv-btn{
+    background:var(--navy-800);
+    border:1px solid var(--navy-700);
+    color:var(--cream);
+    padding:6px 14px;
+    border-radius:5px;
+    font-size:0.82rem;
+    cursor:pointer;
+  }
+  .pv-btn:hover{border-color:var(--gold-500);}
+  .pv-btn.danger:hover{border-color:var(--absent); color:var(--absent);}
+  .pv-arrow, .pv-close{
+    background:none;
+    border:none;
+    color:var(--cream);
+    cursor:pointer;
+    opacity:0.8;
+  }
+  .pv-arrow{font-size:2.6rem; padding:0 8px; flex:0 0 auto;}
+  .pv-arrow:hover, .pv-close:hover{opacity:1; color:var(--gold-300);}
+  .pv-close{position:absolute; top:12px; right:16px; font-size:1.5rem;}
+  @media (max-width:600px){
+    .album-form{flex-direction:column; align-items:stretch;}
+    .pv-arrow{font-size:2rem; padding:0 2px;}
+  }
