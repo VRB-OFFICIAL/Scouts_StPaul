@@ -1316,6 +1316,8 @@
   let albumsUnsub = null;
   let photosUnsub = null;
   let pvIndex = -1;
+  let selectMode = false;            // editor is picking photos to delete
+  const selectedPhotoIds = new Set();
 
   function startAlbumsListener(){
     if(albumsUnsub) return;
@@ -1331,6 +1333,8 @@
 
   function openAlbum(id){
     openAlbumId = id;
+    selectMode = false;
+    selectedPhotoIds.clear();
     albumPhotos = [];
     if(photosUnsub){ photosUnsub(); photosUnsub = null; }
     photosUnsub = firebase.firestore().collection(PHOTOS_COLLECTION).where('albumId','==',id).onSnapshot(snap=>{
@@ -1347,6 +1351,8 @@
 
   function closeAlbum(){
     openAlbumId = null;
+    selectMode = false;
+    selectedPhotoIds.clear();
     albumPhotos = [];
     if(photosUnsub){ photosUnsub(); photosUnsub = null; }
     closeViewer();
@@ -1364,8 +1370,10 @@
 
     const sorted = [...albums].sort((a,b)=>
       String(b.year||'').localeCompare(String(a.year||'')) || (b.createdAt||0)-(a.createdAt||0));
-    const byYear = {};
-    sorted.forEach(a=>{ const y = a.year || 'Other'; (byYear[y] = byYear[y] || []).push(a); });
+    // A Map keeps the newest-first order; plain objects re-sort numeric-looking
+    // keys like "2025" in ascending order.
+    const byYear = new Map();
+    sorted.forEach(a=>{ const y = a.year || 'Other'; if(!byYear.has(y)) byYear.set(y, []); byYear.get(y).push(a); });
 
     wrap.innerHTML = `
       ${isEditor() ? `
@@ -1376,12 +1384,12 @@
           <input type="number" id="albumYear" value="${new Date().getFullYear()}"></div>
         <div><button class="primary-btn" id="addAlbumBtn">Create album</button></div>
       </div>` : ''}
-      ${sorted.length ? Object.keys(byYear).map(y=>`
+      ${sorted.length ? [...byYear.keys()].map(y=>`
         <h3 class="album-year">${escapeHtml(y)}</h3>
         <div class="album-grid">
-          ${byYear[y].map(a=>`
+          ${byYear.get(y).map(a=>`
             <button class="album-card" data-open-album="${a.id}">
-              <div class="album-cover">${a.cover ? `<img src="${a.cover}" alt="">` : '<span>📷</span>'}</div>
+              <div class="album-cover">${(a.icon || a.cover) ? `<img src="${a.icon || a.cover}" alt="">` : '<span>📷</span>'}</div>
               <div class="album-info"><strong>${escapeHtml(a.name)}</strong>
                 <span>${a.count||0} photo${(a.count||0)===1?'':'s'}</span></div>
             </button>`).join('')}
@@ -1406,37 +1414,153 @@
   function renderAlbumDetail(wrap){
     const album = albums.find(a=>a.id===openAlbumId);
     if(!album){ closeAlbum(); return; }
+    if(!isEditor()){ selectMode = false; selectedPhotoIds.clear(); }
+    // forget selections for photos that no longer exist
+    [...selectedPhotoIds].forEach(id=>{ if(!albumPhotos.find(p=>p.id===id)) selectedPhotoIds.delete(id); });
+
     wrap.innerHTML = `
       <div class="album-header">
         <button class="album-back" id="albumBackBtn">‹ All albums</button>
         <h3>${escapeHtml(album.name)}<span class="test-meta">${escapeHtml(album.year||'')}</span></h3>
+        ${selectMode ? '' : `
         <div class="album-actions">
           ${albumPhotos.length ? `<button class="album-back" id="downloadAlbumBtn">⬇ Download all (${albumPhotos.length})</button>` : ''}
+          ${isEditor() && albumPhotos.length ? `<button class="album-back" id="selectModeBtn">☑ Select</button>` : ''}
           ${isEditor() ? `
+          <label class="album-back album-upload" title="Pick a picture to show on the album card (it won't appear inside the album)">🖼 ${album.icon ? 'Change' : 'Set'} icon
+            <input type="file" id="albumIconInput" accept="image/*" hidden></label>
+          ${album.icon ? `<button class="album-back" id="removeIconBtn" title="Go back to using the first photo">Remove icon</button>` : ''}
           <label class="primary-btn album-upload">+ Add photos
             <input type="file" id="albumFileInput" accept="image/*" multiple hidden></label>
           <button class="test-delete-btn" id="deleteAlbumBtn" title="Delete this album">✕</button>` : ''}
-        </div>
+        </div>`}
       </div>
+      ${selectMode ? `
+      <div class="select-bar">
+        <span id="selCount"></span>
+        <button class="album-back" id="selAllBtn">Select all</button>
+        <button class="pv-btn danger" id="selDeleteBtn">Delete</button>
+        <button class="album-back" id="selCancelBtn">Cancel</button>
+      </div>` : ''}
       ${albumPhotos.length ? `<div class="photo-grid">
         ${albumPhotos.map((p,i)=>`
-          <button class="photo-tile" data-photo="${i}"><img src="${p.thumb}" alt="${escapeAttr(p.caption||'')}" loading="lazy"></button>`).join('')}
+          <button class="photo-tile ${selectMode && selectedPhotoIds.has(p.id) ? 'selected' : ''}" data-photo="${i}">
+            <img src="${p.thumb}" alt="${escapeAttr(p.caption||'')}" loading="lazy">
+            ${selectMode ? '<span class="photo-check">✓</span>' : ''}
+          </button>`).join('')}
       </div>` : '<p class="empty-msg">No photos in this album yet.</p>'}
     `;
+
     document.getElementById('albumBackBtn').addEventListener('click', closeAlbum);
+
     wrap.querySelectorAll('[data-photo]').forEach(b=>{
-      b.addEventListener('click', ()=>{ pvIndex = parseInt(b.dataset.photo,10); updateViewer(); });
+      b.addEventListener('click', ()=>{
+        const i = parseInt(b.dataset.photo, 10);
+        if(selectMode){
+          const id = albumPhotos[i].id;
+          if(selectedPhotoIds.has(id)) selectedPhotoIds.delete(id); else selectedPhotoIds.add(id);
+          b.classList.toggle('selected', selectedPhotoIds.has(id));
+          updateSelectionUI();
+        } else {
+          pvIndex = i;
+          updateViewer();
+        }
+      });
     });
+
+    const on = (id, fn)=>{ const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+    on('downloadAlbumBtn', downloadAlbum);
+    on('deleteAlbumBtn', deleteAlbum);
+    on('removeIconBtn', removeAlbumIcon);
+    on('selectModeBtn', ()=>{ if(!isEditor()) return; selectMode = true; selectedPhotoIds.clear(); renderAlbumsView(); });
+    on('selCancelBtn', ()=>{ selectMode = false; selectedPhotoIds.clear(); renderAlbumsView(); });
+    on('selAllBtn', ()=>{
+      const allSelected = selectedPhotoIds.size === albumPhotos.length;
+      selectedPhotoIds.clear();
+      if(!allSelected) albumPhotos.forEach(p=> selectedPhotoIds.add(p.id));
+      wrap.querySelectorAll('[data-photo]').forEach(b=>{
+        b.classList.toggle('selected', selectedPhotoIds.has(albumPhotos[parseInt(b.dataset.photo,10)].id));
+      });
+      updateSelectionUI();
+    });
+    on('selDeleteBtn', deleteSelectedPhotos);
+
     const fileInput = document.getElementById('albumFileInput');
     if(fileInput) fileInput.addEventListener('change', ()=>{
       const files = Array.from(fileInput.files);
       fileInput.value = '';
       uploadPhotos(files);
     });
-    const delBtn = document.getElementById('deleteAlbumBtn');
-    if(delBtn) delBtn.addEventListener('click', deleteAlbum);
-    const dlBtn = document.getElementById('downloadAlbumBtn');
-    if(dlBtn) dlBtn.addEventListener('click', downloadAlbum);
+    const iconInput = document.getElementById('albumIconInput');
+    if(iconInput) iconInput.addEventListener('change', ()=>{
+      const file = iconInput.files[0];
+      iconInput.value = '';
+      setAlbumIcon(file);
+    });
+
+    if(selectMode) updateSelectionUI();
+  }
+
+  function updateSelectionUI(){
+    const n = selectedPhotoIds.size;
+    const count = document.getElementById('selCount');
+    const del = document.getElementById('selDeleteBtn');
+    const all = document.getElementById('selAllBtn');
+    if(count) count.textContent = n ? `${n} selected` : 'Tap photos to select them';
+    if(del){ del.textContent = n ? `Delete (${n})` : 'Delete'; del.disabled = !n; }
+    if(all) all.textContent = (n && n === albumPhotos.length) ? 'Deselect all' : 'Select all';
+  }
+
+  async function deleteSelectedPhotos(){
+    if(!isEditor() || !openAlbumId || !selectedPhotoIds.size) return;
+    const ids = [...selectedPhotoIds];
+    const n = ids.length;
+    if(!confirm(`Delete ${n} photo${n===1?'':'s'}? This can't be undone.`)) return;
+    const db = firebase.firestore();
+    const albumId = openAlbumId;
+    const remaining = albumPhotos.filter(p=> !selectedPhotoIds.has(p.id));
+    try{
+      showStatus(`Deleting ${n} photo${n===1?'':'s'}…`, false);
+      for(let i = 0; i < ids.length; i += 400){
+        const batch = db.batch();
+        ids.slice(i, i + 400).forEach(id=> batch.delete(db.collection(PHOTOS_COLLECTION).doc(id)));
+        await batch.commit();
+      }
+      // the first remaining photo becomes the automatic album picture
+      await db.collection(ALBUMS_COLLECTION).doc(albumId).update({
+        count: firebase.firestore.FieldValue.increment(-n),
+        cover: remaining.length ? remaining[0].thumb : ''
+      });
+      selectedPhotoIds.clear();
+      selectMode = false;
+      renderAlbumsView();
+      showStatus(`Deleted ${n} photo${n===1?'':'s'} ✓`, false);
+    }catch(e){
+      console.error('Bulk delete failed', e);
+      showStatus('Could not delete photos: ' + (e.code || e.message), true);
+    }
+  }
+
+  // The album icon is stored on the album itself (not as a photo), so it is
+  // only used for the album card and never appears inside the album.
+  async function setAlbumIcon(file){
+    if(!isEditor() || !openAlbumId || !file) return;
+    try{
+      if(!file.type.startsWith('image/')) throw new Error('Not an image');
+      showStatus('Saving icon…', false);
+      const img = await loadImage(file);
+      const icon = resizeToDataUrl(img, 480, 0.75);
+      await firebase.firestore().collection(ALBUMS_COLLECTION).doc(openAlbumId).update({ icon });
+      showStatus('Album icon updated ✓', false);
+    }catch(e){
+      console.error('Icon failed', e);
+      showStatus('Could not set the icon: ' + (e.code || e.message), true);
+    }
+  }
+  function removeAlbumIcon(){
+    if(!isEditor() || !openAlbumId) return;
+    firebase.firestore().collection(ALBUMS_COLLECTION).doc(openAlbumId).update({ icon: '' })
+      .catch(e=> showStatus('Could not remove icon: ' + (e.code || e.message), true));
   }
 
   // ----- download a whole album as one .zip (no extra libraries needed) -----
