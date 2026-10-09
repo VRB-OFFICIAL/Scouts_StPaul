@@ -1410,12 +1410,13 @@
       <div class="album-header">
         <button class="album-back" id="albumBackBtn">‹ All albums</button>
         <h3>${escapeHtml(album.name)}<span class="test-meta">${escapeHtml(album.year||'')}</span></h3>
-        ${isEditor() ? `
         <div class="album-actions">
+          ${albumPhotos.length ? `<button class="album-back" id="downloadAlbumBtn">⬇ Download all (${albumPhotos.length})</button>` : ''}
+          ${isEditor() ? `
           <label class="primary-btn album-upload">+ Add photos
             <input type="file" id="albumFileInput" accept="image/*" multiple hidden></label>
-          <button class="test-delete-btn" id="deleteAlbumBtn" title="Delete this album">✕</button>
-        </div>` : ''}
+          <button class="test-delete-btn" id="deleteAlbumBtn" title="Delete this album">✕</button>` : ''}
+        </div>
       </div>
       ${albumPhotos.length ? `<div class="photo-grid">
         ${albumPhotos.map((p,i)=>`
@@ -1434,6 +1435,89 @@
     });
     const delBtn = document.getElementById('deleteAlbumBtn');
     if(delBtn) delBtn.addEventListener('click', deleteAlbum);
+    const dlBtn = document.getElementById('downloadAlbumBtn');
+    if(dlBtn) dlBtn.addEventListener('click', downloadAlbum);
+  }
+
+  // ----- download a whole album as one .zip (no extra libraries needed) -----
+  const crcTable = (()=>{
+    const t = new Uint32Array(256);
+    for(let n = 0; n < 256; n++){
+      let c = n;
+      for(let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes){
+    let c = 0xFFFFFFFF;
+    for(let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function dataUrlToBytes(url){
+    const bin = atob(url.split(',')[1]);
+    const out = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  // Photos are already JPEG-compressed, so files are stored as-is (no deflate).
+  function buildZip(files){
+    const enc = new TextEncoder();
+    const now = new Date();
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    const parts = [], central = [];
+    let offset = 0;
+    files.forEach(f=>{
+      const nameBytes = enc.encode(f.name);
+      const crc = crc32(f.bytes);
+      const size = f.bytes.length;
+      const loc = new DataView(new ArrayBuffer(30));
+      loc.setUint32(0, 0x04034b50, true); loc.setUint16(4, 20, true); loc.setUint16(6, 0x0800, true);
+      loc.setUint16(8, 0, true); loc.setUint16(10, dosTime, true); loc.setUint16(12, dosDate, true);
+      loc.setUint32(14, crc, true); loc.setUint32(18, size, true); loc.setUint32(22, size, true);
+      loc.setUint16(26, nameBytes.length, true); loc.setUint16(28, 0, true);
+      parts.push(loc.buffer, nameBytes, f.bytes);
+      const cen = new DataView(new ArrayBuffer(46));
+      cen.setUint32(0, 0x02014b50, true); cen.setUint16(4, 20, true); cen.setUint16(6, 20, true);
+      cen.setUint16(8, 0x0800, true); cen.setUint16(10, 0, true); cen.setUint16(12, dosTime, true);
+      cen.setUint16(14, dosDate, true); cen.setUint32(16, crc, true); cen.setUint32(20, size, true);
+      cen.setUint32(24, size, true); cen.setUint16(28, nameBytes.length, true);
+      cen.setUint32(42, offset, true);
+      central.push(cen.buffer, nameBytes);
+      offset += 30 + nameBytes.length + size;
+    });
+    const cenSize = central.reduce((n, part)=> n + part.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cenSize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+  }
+
+  function downloadAlbum(){
+    const album = albums.find(a=>a.id===openAlbumId);
+    if(!album || !albumPhotos.length) return;
+    showStatus('Preparing download…', false);
+    try{
+      const base = (album.name || 'album').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'album';
+      const pad = String(albumPhotos.length).length;
+      const files = albumPhotos.map((p, i)=>({
+        name: `${base}-${String(i + 1).padStart(Math.max(pad, 2), '0')}.jpg`,
+        bytes: dataUrlToBytes(p.full)
+      }));
+      const url = URL.createObjectURL(buildZip(files));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = base + (album.year ? '-' + album.year : '') + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 10000);
+    }catch(e){
+      console.error('Download failed', e);
+      showStatus('Could not build the download.', true);
+    }
   }
 
   function loadImage(file){
